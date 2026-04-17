@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  # Database PostgreSQL untuk penyimpanan permanen transaksi
+  db:
+    image: postgres:15-alpine
+    container_name: qris_postgres
+    environment:
+      POSTGRES_USER: user_qris
+      POSTGRES_PASSWORD: password_qris
+      POSTGRES_DB: qris_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+
+volumes:
+  postgres_data:
