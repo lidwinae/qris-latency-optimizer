@@ -15,5 +15,23 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
 
+  # Redis untuk Caching Layer (Kunci optimasi latency p95)
+  redis:
+    image: redis:7-alpine
+    container_name: qris_redis
+    ports:
+      - "6379:6379"
+
+  # RabbitMQ untuk Message Broker (Proses Asynchronous)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: qris_rabbitmq
+    ports:
+      - "5672:5672"   # Port data
+      - "15672:15672" # Port Dashboard (bisa dibuka di browser)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
 volumes:
   postgres_data:

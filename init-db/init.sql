@@ -1,19 +1,23 @@
 -- TABEL MERCHANTS
 -- Menyimpan data merchant/toko pemilik QRIS
 CREATE TABLE merchants (
-    id SERIAL PRIMARY KEY,
-    qr_id TEXT NOT NULL, -- Tipe TEXT lambat untuk dicari, tidak ada UNIQUE
-    merchant_name TEXT NOT NULL,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    qr_id VARCHAR(50) UNIQUE NOT NULL, 
+    merchant_name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Indexing pada qr_id agar pencarian data saat QR di-scan selalu cepat
+CREATE INDEX idx_merchants_qr_id ON merchants(qr_id);
 
 -- TABEL TRANSACTIONS
 -- Menyimpan riwayat transaksi pembayaran
 CREATE TABLE transactions (
-    id SERIAL PRIMARY KEY,
-    merchant_id INT, -- Tidak ada Foreign Key yang mengikat ketat
-    amount BIGINT NOT NULL,
-    status TEXT DEFAULT 'PENDING',
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id),
+    amount DECIMAL(15, 2) NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
