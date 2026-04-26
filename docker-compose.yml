@@ -35,13 +35,35 @@ services:
     image: dpage/pgadmin4
     container_name: pgadmin
     restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+
+  # --- MONITORING STACK (ADDITION) ---
+
+  # InfluxDB untuk menyimpan metrik hasil Load Test k6
+  influxdb:
+    image: influxdb:1.8-alpine
+    container_name: qris_influxdb
     ports:
-      - "5050:80"
+      - "8086:8086"
+    environment:
+      - INFLUXDB_DB=k6
+    volumes:
+      - influxdb_data:/var/lib/influxdb
+
+  # Grafana untuk visualisasi grafik real-time
+  grafana:
+    image: grafana/grafana-oss
+    container_name: qris_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     depends_on:
-      - db
+      - influxdb
+    volumes:
+      - grafana_data:/var/lib/grafana
 
 volumes:
   postgres_data:
+  influxdb_data:
+  grafana_data:
