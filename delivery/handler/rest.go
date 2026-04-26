@@ -10,4 +10,9 @@ func Rest(r *gin.Engine) {
 	r.GET("/api/qris", service.GenerateDynamic)
 
 	r.GET("/ping", service.Ping)
+
+	// New transaction endpoints
+	r.POST("/api/transactions/scan", service.ScanQR)
+	r.GET("/api/transactions/:id", service.GetTransactionStatus)
+	r.POST("/api/transactions/:id/confirm", service.ConfirmPayment)
 }
