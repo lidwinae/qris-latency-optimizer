@@ -17,7 +17,11 @@ func Rest(r *gin.Engine) {
         AllowCredentials: true,
     }))
 	
+	// DIUBAH: Endpoint QRIS dengan merchant_id support
 	r.GET("/api/qris", service.GenerateDynamic)
+	
+	// BARU: Endpoint untuk fetch daftar merchant
+	r.GET("/api/merchants", service.GetMerchants)
 
 	r.GET("/ping", service.Ping)
 
