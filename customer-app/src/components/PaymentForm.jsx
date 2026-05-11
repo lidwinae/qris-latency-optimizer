@@ -1,12 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import '../styles/PaymentForm.css';
+import { extractMerchantFromQRIS, extractAmountFromQRIS } from '../services/api';
 
 export default function PaymentForm({ onSubmit, isLoading, scannedQR }) {
   const [formData, setFormData] = useState({
     qrPayload: scannedQR || '',
-    merchantId: '550e8400-e29b-41d4-a716-446655440000', // Default dari backend
+    merchantId: '',
     amount: '',
   });
+
+  // BARU: Extract data dari QR saat component mount atau scannedQR berubah
+  useEffect(() => {
+    if (scannedQR) {
+      const extractedMerchantId = extractMerchantFromQRIS(scannedQR);
+      const extractedAmount = extractAmountFromQRIS(scannedQR);
+
+      console.log('Extracted Merchant ID:', extractedMerchantId);
+      console.log('Extracted Amount:', extractedAmount);
+
+      setFormData((prev) => ({
+        ...prev,
+        qrPayload: scannedQR,
+        merchantId: extractedMerchantId || '',
+        amount: extractedAmount || '',
+      }));
+    }
+  }, [scannedQR]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -52,10 +71,10 @@ export default function PaymentForm({ onSubmit, isLoading, scannedQR }) {
               name="merchantId"
               value={formData.merchantId}
               onChange={handleChange}
-              placeholder="Enter merchant ID"
+              placeholder="Extracted from QR code"
               disabled
             />
-            <small>Default merchant for testing</small>
+            <small>Automatically extracted from QR code</small>
           </div>
 
           <div className="form-group">
@@ -65,17 +84,17 @@ export default function PaymentForm({ onSubmit, isLoading, scannedQR }) {
               name="amount"
               value={formData.amount}
               onChange={handleChange}
-              placeholder="Enter payment amount"
+              placeholder="Extracted from QR code"
               min="1000"
               step="1000"
-              required
+              disabled
             />
-            <small>Minimum: IDR 1,000</small>
+            <small>Automatically extracted from QR code</small>
           </div>
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !formData.merchantId || !formData.amount}
             className="submit-button"
           >
             {isLoading ? '⏳ Processing...' : '✓ Confirm Payment'}

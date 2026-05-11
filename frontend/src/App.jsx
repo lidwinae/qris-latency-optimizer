@@ -38,23 +38,32 @@ export default function App() {
   const [submittedAmount, setSubmittedAmount] = useState(1000);
 
   // Load merchant list saat component mount
-  useEffect(() => {
-    const fetchMerchants = async () => {
-      try {
-        // DIUBAH: Gunakan API_BASE_URL
-        const response = await fetch(`${API_BASE_URL}/merchants`);
-        const data = await response.json();
-        setMerchants(data.merchants || []);
-        if (data.merchants && data.merchants.length > 0) {
-          setSelectedMerchantId(data.merchants[0].id);
-          setSelectedMerchantInfo(data.merchants[0]);
-        }
-      } catch (err) {
-        console.error("Failed to fetch merchants", err);
+useEffect(() => {
+  const fetchMerchants = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/merchants`);
+      const data = await response.json();
+      
+      // TAMBAHKAN: Map data agar lowercase
+      const normalizedMerchants = data.merchants.map(m => ({
+        id: m.ID,
+        qr_id: m.QRID,
+        merchant_name: m.MerchantName,
+        is_active: m.IsActive,
+        created_at: m.CreatedAt
+      }));
+      
+      setMerchants(normalizedMerchants);
+      if (normalizedMerchants.length > 0) {
+        setSelectedMerchantId(normalizedMerchants[0].id);
+        setSelectedMerchantInfo(normalizedMerchants[0]);
       }
-    };
-    fetchMerchants();
-  }, []);
+    } catch (err) {
+      console.error("Failed to fetch merchants", err);
+    }
+  };
+  fetchMerchants();
+}, []);
 
   // Generate QRIS dengan merchant_id
   useEffect(() => {
