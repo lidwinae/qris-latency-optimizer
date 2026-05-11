@@ -56,7 +56,7 @@ npm run dev
 **4. Start the Customer App**
 Open a new terminal and run:
 ```bash
-cd frontend
+cd customer-app
 npm install   # Required only for the first time
 npm run dev
 ```
