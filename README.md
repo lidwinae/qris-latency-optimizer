@@ -26,10 +26,10 @@ The system runs several core services via Docker:
 
 ## 🚀 How to Run
 
-### 1. Prerequisites
+### Prerequisites
 Before starting, ensure that **Docker Desktop** or the **Docker Engine** is already running on your machine. You will also need **Node.js** and **Go** installed locally for development.
 
-### 2. Start the Infrastructure
+**1. Start the Infrastructure**
 Navigate to the root project folder and run the following command to start all databases and monitoring tools:
 ```bash
 docker-compose up -d
