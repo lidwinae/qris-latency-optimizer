@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
+// BARU: Dynamic API URL berdasarkan hostname device
+const currentHostname = window.location.hostname;
+const API_BASE_URL = `http://${currentHostname}:8080/api`;
+
 function parseQrisPayload(payload) {
   const result = { merchantName: "", city: "" };
   if (!payload) return result;
@@ -23,30 +27,69 @@ function parseQrisPayload(payload) {
 }
 
 export default function App() {
+  const [merchants, setMerchants] = useState([]);
+  const [selectedMerchantId, setSelectedMerchantId] = useState("");
+  const [selectedMerchantInfo, setSelectedMerchantInfo] = useState(null);
+
   const [payload, setPayload] = useState("");
   const [merchant, setMerchant] = useState({ merchantName: "", city: "" });
   const [loading, setLoading] = useState(true);
   const [inputAmount, setInputAmount] = useState(1000);
   const [submittedAmount, setSubmittedAmount] = useState(1000);
 
+  // Load merchant list saat component mount
   useEffect(() => {
-    if (!submittedAmount || submittedAmount <= 0) {
+    const fetchMerchants = async () => {
+      try {
+        // DIUBAH: Gunakan API_BASE_URL
+        const response = await fetch(`${API_BASE_URL}/merchants`);
+        const data = await response.json();
+        setMerchants(data.merchants || []);
+        if (data.merchants && data.merchants.length > 0) {
+          setSelectedMerchantId(data.merchants[0].id);
+          setSelectedMerchantInfo(data.merchants[0]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch merchants", err);
+      }
+    };
+    fetchMerchants();
+  }, []);
+
+  // Generate QRIS dengan merchant_id
+  useEffect(() => {
+    if (!selectedMerchantId || !submittedAmount || submittedAmount <= 0) {
       setPayload("");
       return;
     }
+    
     setLoading(true);
-    fetch("/api/qris?amount=" + submittedAmount)
-      .then(res => res.json())
-      .then(data => {
+    // DIUBAH: Gunakan API_BASE_URL
+    fetch(
+      `${API_BASE_URL}/qris?merchant_id=${selectedMerchantId}&amount=${submittedAmount}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
         setPayload(data.qris_payload);
         setMerchant(parseQrisPayload(data.qris_payload));
         setLoading(false);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error("Failed to fetch QRIS payload", err);
         setLoading(false);
       });
-  }, [submittedAmount]);
+  }, [selectedMerchantId, submittedAmount]);
+
+  const handleMerchantChange = (e) => {
+    const merchantId = e.target.value;
+    setSelectedMerchantId(merchantId);
+    
+    const selected = merchants.find((m) => m.id === merchantId);
+    setSelectedMerchantInfo(selected);
+    
+    setInputAmount(1000);
+    setSubmittedAmount(1000);
+  };
 
   const formatRupiah = new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -67,24 +110,51 @@ export default function App() {
           </div>
         </div>
 
+        <div style={styles.merchantSelector}>
+          <label style={{ color: "black", fontWeight: "bold", fontSize: "12px" }}>
+            SELECT MERCHANT
+          </label>
+          <select
+            value={selectedMerchantId}
+            onChange={handleMerchantChange}
+            style={styles.selectDropdown}
+          >
+            <option value="">-- Pilih Merchant --</option>
+            {merchants.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.merchant_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div style={styles.merchant}>
-          <h2 style={{ color: "black" }}>{merchant.merchantName}</h2>
-          <p style={{ color: "black" }}>{merchant.city}</p>
+          <h2 style={{ color: "black" }}>
+            {selectedMerchantInfo?.merchant_name || "Pilih Merchant"}
+          </h2>
+          <p style={{ color: "black" }}>
+            {selectedMerchantInfo?.qr_id || ""}
+          </p>
         </div>
 
         <div style={styles.amountBox}>
-          <p style={{ color: "black", fontSize: "12px", fontWeight: "bold" }}>ENTER AMOUNT (IDR)</p>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <p style={{ color: "black", fontSize: "12px", fontWeight: "bold" }}>
+            ENTER AMOUNT (IDR)
+          </p>
+          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
             <input
               type="number"
               value={inputAmount}
-              onChange={(e) => setInputAmount(e.target.value === '' ? '' : Number(e.target.value))}
+              onChange={(e) =>
+                setInputAmount(e.target.value === "" ? "" : Number(e.target.value))
+              }
               style={styles.amountInput}
               min="1"
             />
             <button
               onClick={() => setSubmittedAmount(inputAmount)}
               style={styles.generateButton}
+              disabled={!selectedMerchantId}
             >
               Generate
             </button>
@@ -94,11 +164,13 @@ export default function App() {
         <div style={styles.qrWrapper}>
           {loading ? (
             <p>Generating QR...</p>
-          ) : (
+          ) : payload ? (
             <>
               <QRCodeCanvas value={payload} size={220} />
               <div style={styles.scanLine}></div>
             </>
+          ) : (
+            <p style={{ color: "#999" }}>Select merchant and amount to generate QR</p>
           )}
         </div>
 
@@ -156,7 +228,7 @@ const styles = {
     padding: "6px 12px",
     borderRadius: "20px",
     fontSize: "12px",
-    alignSelf: "flex-start"
+    alignSelf: "flex-start",
   },
   dot: {
     height: "6px",
@@ -165,6 +237,24 @@ const styles = {
     borderRadius: "50%",
     display: "inline-block",
     marginRight: "6px",
+  },
+  merchantSelector: {
+    margin: "20px",
+    padding: "12px",
+    background: "#f9f9f9",
+    borderRadius: "8px",
+  },
+  selectDropdown: {
+    width: "100%",
+    marginTop: "8px",
+    padding: "10px",
+    fontSize: "14px",
+    border: "1px solid #ddd",
+    borderRadius: "6px",
+    backgroundColor: "white",
+    color: "black",
+    cursor: "pointer",
+    outline: "none",
   },
   merchant: {
     textAlign: "center",
@@ -188,7 +278,7 @@ const styles = {
     borderRadius: "8px",
     color: "black",
     outline: "none",
-    padding: "8px"
+    padding: "8px",
   },
   generateButton: {
     padding: "8px 16px",
