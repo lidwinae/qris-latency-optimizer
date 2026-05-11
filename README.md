@@ -1,23 +1,36 @@
 # QRIS Latency Optimizer 🚀
 
-This project is a full-stack QRIS payment system designed to handle extremely low-latency API responses. It implements a cache-aside architecture using Redis to optimize transaction status polling, drastically reducing the load on the primary database.
+This project is a full-stack QRIS payment system designed to handle extremely low-latency API responses. It implements a cache-aside architecture using Redis to optimize transaction status polling and a complete monitoring stack to analyze system performance.
 
 ## 📂 Project Structure
 
-This repository is organized as a monorepo containing both the UI and the server:
+This repository is organized as a monorepo containing the backend, merchant UI, and customer UI:
 
-- **`/backend`**: The Go backend (using the Gin framework). Handles dynamic QR generation, transaction lifecycle, and caching logic.
-- **`/frontend`**: The React + Vite UI. Provides the graphical interface simulating the customer and merchant interaction.
+- **`/backend`**: The Go backend (Gin framework). Handles QR generation, transaction lifecycle, and caching logic.
+- **`/frontend`**: The **Merchant Dashboard** UI (React + Vite). Runs on port 5173.
+- **`/customer-app`**: The **Customer Mobile** UI (React + Vite). Runs on port 5174.
 
-## 🛠️ Tech Stack
+## 🛠️ Tech Stack & Infrastructure
 
-- **Backend**: Go, Gin, GORM
-- **Frontend**: React, Vite
-- **Databases/Infra**: PostgreSQL (Persistence), Redis (Caching), Docker
+The system runs several core services via Docker:
+
+- **PostgreSQL**: Primary persistent storage for transaction data.
+- **Redis**: Caching layer for high-speed transaction status checks (Key to P95 latency optimization).
+- **RabbitMQ**: Message broker for handling asynchronous tasks and background processing.
+- **pgAdmin**: Web interface for managing the PostgreSQL database (Port 5050).
+- **Monitoring Stack**: 
+  - **InfluxDB**: Time-series database to store load test metrics from k6.
+  - **Grafana**: Dashboard for real-time visualization of system metrics and latency (Port 3000).
+
+---
 
 ## 🚀 How to Run
 
-**1. Start the Infrastructure (Database & Redis)**
+### 1. Prerequisites
+Before starting, ensure that **Docker Desktop** or the **Docker Engine** is already running on your machine. You will also need **Node.js** and **Go** installed locally for development.
+
+### 2. Start the Infrastructure
+Navigate to the root project folder and run the following command to start all databases and monitoring tools:
 ```bash
 docker-compose up -d
 ```
@@ -26,17 +39,28 @@ docker-compose up -d
 Open a terminal and run:
 ```bash
 cd backend
+# Ensure your .env is configured (DB_HOST=localhost)
 go run cmd/main.go
 ```
 *(The backend runs on http://localhost:8080)*
 
-**3. Start the Frontend UI**
+**3. Start the Frontend UI / Merchant App**
 Open a new terminal and run:
 ```bash
 cd frontend
+npm install   # Required only for the first time
 npm run dev
 ```
-*(The frontend runs on http://localhost:5173)*
+*(The merchant dashboard runs on http://localhost:5173)*
+
+**4. Start the Customer App**
+Open a new terminal and run:
+```bash
+cd frontend
+npm install   # Required only for the first time
+npm run dev
+```
+*(The customer app runs on http://localhost:5174)*
 
 ## 📚 Architectural Details (Clean Architecture)
 
