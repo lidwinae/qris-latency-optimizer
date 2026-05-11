@@ -1,28 +1,14 @@
-# QRIS Latency Optimizer 🚀
+# QRIS Transaction System - Legacy Version (Baseline)
 
-This project is a full-stack QRIS payment system designed to handle extremely low-latency API responses. It implements a cache-aside architecture using Redis to optimize transaction status polling and a complete monitoring stack to analyze system performance.
+This legacy app is used for comparing the performance of a standard, unoptimized transaction system against the QRIS Latency Optimizer (the optimized version). It serves as a baseline to demonstrate how a system behaves when every transaction and inquiry request hits the primary database (PostgreSQL) directly without a caching layer.
 
 ## 📂 Project Structure
 
 This repository is organized as a monorepo containing the backend, merchant UI, and customer UI:
 
-- **`/backend`**: The Go backend (Gin framework). Handles QR generation, transaction lifecycle, and caching logic.
+- **`/backend`**: The Go backend (Gin framework). Handles QR generation and transaction.
 - **`/frontend`**: The **Merchant Dashboard** UI (React + Vite). Runs on port 5173.
 - **`/customer-app`**: The **Customer Mobile** UI (React + Vite). Runs on port 5174.
-
-## 🛠️ Tech Stack & Infrastructure
-
-The system runs several core services via Docker:
-
-- **PostgreSQL**: Primary persistent storage for transaction data.
-- **Redis**: Caching layer for high-speed transaction status checks (Key to P95 latency optimization).
-- **RabbitMQ**: Message broker for handling asynchronous tasks and background processing.
-- **pgAdmin**: Web interface for managing the PostgreSQL database (Port 5050).
-- **Monitoring Stack**: 
-  - **InfluxDB**: Time-series database to store load test metrics from k6.
-  - **Grafana**: Dashboard for real-time visualization of system metrics and latency (Port 3000).
-
----
 
 ## 🚀 How to Run
 
@@ -61,10 +47,3 @@ npm install   # Required only for the first time
 npm run dev
 ```
 *(The customer app runs on http://localhost:5174)*
-
-## 📚 Architectural Details (Clean Architecture)
-
-The backend follows Clean Architecture principles:
-- **`usecase/customer`**: Contains endpoints mimicking customer actions (e.g., scanning the QR code, simulating payment confirmation).
-- **`usecase/service`**: Contains endpoints for the merchant backend (e.g., generating the dynamic QR code string, checking transaction status).
-- **Latency Optimization**: The `GetTransactionStatus` API queries Redis first. If there's a cache hit, it returns immediately. On a cache miss, it fetches from PostgreSQL and re-populates Redis. When a payment is confirmed, the Redis cache is instantly invalidated to prevent stale data.
