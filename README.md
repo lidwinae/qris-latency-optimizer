@@ -27,16 +27,22 @@ The system runs several core services via Docker:
 ## 🚀 How to Run
 
 ### Prerequisites
+<p allign="justify">
 Before starting, ensure that **Docker Desktop** or the **Docker Engine** is already running on your machine. You will also need **Node.js** and **Go** installed locally for development.
+</p>
 
 **1. Start the Infrastructure**
+<p allign="justify">
 Navigate to the root project folder and run the following command to start all databases and monitoring tools:
+</p>
 ```bash
 docker-compose up -d
 ```
 
 **2. Start the Backend API**
+<p allign="justify">
 Open a terminal and run:
+</p>
 ```bash
 cd backend
 # Ensure your .env is configured (DB_HOST=localhost)
@@ -45,7 +51,9 @@ go run cmd/main.go
 *(The backend runs on http://localhost:8080)*
 
 **3. Start the Frontend UI / Merchant App**
+<p allign="justify">
 Open a new terminal and run:
+</p>
 ```bash
 cd frontend
 npm install   # Required only for the first time
@@ -54,7 +62,9 @@ npm run dev
 *(The merchant dashboard runs on http://localhost:5173)*
 
 **4. Start the Customer App**
+<p allign="justify">
 Open a new terminal and run:
+</p>
 ```bash
 cd customer-app
 npm install   # Required only for the first time

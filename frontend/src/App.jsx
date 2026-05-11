@@ -128,7 +128,7 @@ useEffect(() => {
             onChange={handleMerchantChange}
             style={styles.selectDropdown}
           >
-            <option value="">-- Pilih Merchant --</option>
+            <option value="">-- Select Merchant --</option>
             {merchants.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.merchant_name}
@@ -139,7 +139,7 @@ useEffect(() => {
 
         <div style={styles.merchant}>
           <h2 style={{ color: "black" }}>
-            {selectedMerchantInfo?.merchant_name || "Pilih Merchant"}
+            {selectedMerchantInfo?.merchant_name || "Select Merchant"}
           </h2>
           <p style={{ color: "black" }}>
             {selectedMerchantInfo?.qr_id || ""}
