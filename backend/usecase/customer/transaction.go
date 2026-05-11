@@ -1,23 +1,20 @@
 package customer
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"qris-latency-optimizer/models"
-	"qris-latency-optimizer/repository/database"
-	"qris-latency-optimizer/repository/redis"
 	"time"
 
+	"qris-latency-optimizer/models"
+	"qris-latency-optimizer/repository/database"
+
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
-// ScanQR - endpoint untuk scan QR dari customer
-func ScanQR(c *gin.Context) {
+// ScanQRLegacy - create transaction tanpa redis
+func ScanQRLegacy(c *gin.Context) {
 	var req models.ScanQRRequest
 
-	// Parse request body
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "invalid request: " + err.Error(),
@@ -25,61 +22,48 @@ func ScanQR(c *gin.Context) {
 		return
 	}
 
-	// Generate transaction ID
-	transactionID := uuid.New().String()
-	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
-
-	// Buat transaction model
+	// Buat transaction model (auto-increment ID)
 	transaction := models.Transaction{
-		ID:         uuid.MustParse(transactionID),
-		MerchantID: uuid.MustParse(req.MerchantID),
+		MerchantID: req.MerchantID,
 		Amount:     req.Amount,
 		Status:     "PENDING",
 		CreatedAt:  time.Now(),
 	}
 
-	// Simpan ke database
+	// Simpan ke database saja (no redis)
+	startTime := time.Now()
 	if err := database.DB.Create(&transaction).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create transaction: " + err.Error(),
 		})
 		return
 	}
+	queryTime := time.Since(startTime).Milliseconds()
 
-	// Simpan ke Redis dengan TTL 10 menit
-	transactionJSON, _ := json.Marshal(transaction)
-	redis.Set(cacheKey, string(transactionJSON), 10*time.Minute)
+	fmt.Printf("✓ Transaction Created: ID=%d | Time: %dms (LEGACY - NO CACHE)\n", transaction.ID, queryTime)
 
 	response := models.TransactionResponse{
-		TransactionID: transactionID,
+		TransactionID: transaction.ID,
 		MerchantID:    req.MerchantID,
 		Amount:        req.Amount,
 		Status:        "PENDING",
 		CreatedAt:     transaction.CreatedAt,
-		CachedFrom:    false,
+		QueryTime:     queryTime,
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"data":    response,
-		"message": "transaction created successfully",
+		"message": "transaction created successfully (LEGACY)",
 	})
 }
 
-// ConfirmPayment - endpoint untuk confirm pembayaran
-func ConfirmPayment(c *gin.Context) {
+// ConfirmPaymentLegacy - confirm payment tanpa redis
+func ConfirmPaymentLegacy(c *gin.Context) {
 	transactionID := c.Param("id")
 
-	// Validasi UUID
-	if _, err := uuid.Parse(transactionID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid transaction id",
-		})
-		return
-	}
+	startTime := time.Now()
 
-	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
-
-	// Update di database
+	// Update database saja (no cache invalidation)
 	if err := database.DB.Model(&models.Transaction{}).
 		Where("id = ?", transactionID).
 		Update("status", "SUCCESS").Error; err != nil {
@@ -89,24 +73,24 @@ func ConfirmPayment(c *gin.Context) {
 		return
 	}
 
-	// Hapus dari cache (invalidate)
-	redis.Delete(cacheKey)
-	fmt.Println("✓ Cache invalidated after payment confirmation")
+	queryTime := time.Since(startTime).Milliseconds()
+	fmt.Printf("✓ Payment Confirmed: ID=%s | Time: %dms (LEGACY - NO CACHE)\n", transactionID, queryTime)
 
-	// Ambil data transaksi yang sudah updated
+	// Ambil data yang sudah updated
 	var transaction models.Transaction
 	database.DB.First(&transaction, "id = ?", transactionID)
 
 	response := models.TransactionResponse{
-		TransactionID: transactionID,
-		MerchantID:    transaction.MerchantID.String(),
+		TransactionID: transaction.ID,
+		MerchantID:    transaction.MerchantID,
 		Amount:        transaction.Amount,
 		Status:        transaction.Status,
 		CreatedAt:     transaction.CreatedAt,
+		QueryTime:     queryTime,
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":    response,
-		"message": "payment confirmed successfully",
+		"message": "payment confirmed successfully (LEGACY)",
 	})
 }

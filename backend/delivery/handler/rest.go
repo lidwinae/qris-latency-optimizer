@@ -17,16 +17,9 @@ func Rest(r *gin.Engine) {
         AllowCredentials: true,
     }))
 	
-	// DIUBAH: Endpoint QRIS dengan merchant_id support
-	r.GET("/api/qris", service.GenerateDynamic)
-	
-	// BARU: Endpoint untuk fetch daftar merchant
-	r.GET("/api/merchants", service.GetMerchants)
-
-	r.GET("/ping", service.Ping)
-
-	// New transaction endpoints
-	r.POST("/api/transactions/scan", customer.ScanQR)
-	r.GET("/api/transactions/:id", service.GetTransactionStatus)
-	r.POST("/api/transactions/:id/confirm", customer.ConfirmPayment)
+	r.GET("/api/legacy/qris", service.GenerateDynamicLegacy)
+	r.GET("/api/legacy/merchants", service.GetMerchantsLegacy)
+	r.POST("/api/legacy/transactions/scan", customer.ScanQRLegacy)
+	r.GET("/api/legacy/transactions/:id", service.GetTransactionStatusLegacy)
+	r.POST("/api/legacy/transactions/:id/confirm", customer.ConfirmPaymentLegacy)
 }

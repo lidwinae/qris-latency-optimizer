@@ -7,8 +7,8 @@ This legacy app is used for comparing the performance of a standard, unoptimized
 This repository is organized as a monorepo containing the backend, merchant UI, and customer UI:
 
 - **`/backend`**: The Go backend (Gin framework). Handles QR generation and transaction.
-- **`/frontend`**: The **Merchant Dashboard** UI (React + Vite). Runs on port 5173.
-- **`/customer-app`**: The **Customer Mobile** UI (React + Vite). Runs on port 5174.
+- **`/frontend`**: The **Merchant Dashboard** UI (React + Vite). Runs on port 5175.
+- **`/customer-app`**: The **Customer Mobile** UI (React + Vite). Runs on port 5176.
 
 ## 🚀 How to Run
 
@@ -28,7 +28,7 @@ cd backend
 # Ensure your .env is configured (DB_HOST=localhost)
 go run cmd/main.go
 ```
-*(The backend runs on http://localhost:8080)*
+*(The backend runs on http://localhost:8081)*
 
 ### 3. Start the Frontend UI / Merchant App
 Open a new terminal and run:
@@ -37,7 +37,7 @@ cd frontend
 npm install   # Required only for the first time
 npm run dev
 ```
-*(The merchant dashboard runs on http://localhost:5173)*
+*(The merchant dashboard runs on http://localhost:5175)*
 
 ### 4. Start the Customer App
 Open a new terminal and run:
@@ -46,4 +46,4 @@ cd customer-app
 npm install   # Required only for the first time
 npm run dev
 ```
-*(The customer app runs on http://localhost:5174)*
+*(The customer app runs on http://localhost:5176)*

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
-// BARU: Dynamic API URL berdasarkan hostname device
+// LEGACY: Endpoint ke /api/legacy
 const currentHostname = window.location.hostname;
-const API_BASE_URL = `http://${currentHostname}:8080/api`;
+const API_BASE_URL = `http://${currentHostname}:8081/api/legacy`;
 
 function parseQrisPayload(payload) {
   const result = { merchantName: "", city: "" };
@@ -26,7 +26,7 @@ function parseQrisPayload(payload) {
   return result;
 }
 
-export default function App() {
+export default function AppLegacy() {
   const [merchants, setMerchants] = useState([]);
   const [selectedMerchantId, setSelectedMerchantId] = useState("");
   const [selectedMerchantInfo, setSelectedMerchantInfo] = useState(null);
@@ -37,35 +37,34 @@ export default function App() {
   const [inputAmount, setInputAmount] = useState(1000);
   const [submittedAmount, setSubmittedAmount] = useState(1000);
 
-  // Load merchant list saat component mount
-useEffect(() => {
-  const fetchMerchants = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/merchants`);
-      const data = await response.json();
-      
-      // TAMBAHKAN: Map data agar lowercase
-      const normalizedMerchants = data.merchants.map(m => ({
-        id: m.ID,
-        qr_id: m.QRID,
-        merchant_name: m.MerchantName,
-        is_active: m.IsActive,
-        created_at: m.CreatedAt
-      }));
-      
-      setMerchants(normalizedMerchants);
-      if (normalizedMerchants.length > 0) {
-        setSelectedMerchantId(normalizedMerchants[0].id);
-        setSelectedMerchantInfo(normalizedMerchants[0]);
+  // Load merchant list
+  useEffect(() => {
+    const fetchMerchants = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/merchants`);
+        const data = await response.json();
+        
+        // Map data dengan lowercase
+        const normalizedMerchants = data.merchants.map(m => ({
+          id: m.id,
+          qr_id: m.qr_id,
+          merchant_name: m.merchant_name,
+          created_at: m.created_at
+        }));
+        
+        setMerchants(normalizedMerchants);
+        if (normalizedMerchants.length > 0) {
+          setSelectedMerchantId(normalizedMerchants[0].id);
+          setSelectedMerchantInfo(normalizedMerchants[0]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch merchants", err);
       }
-    } catch (err) {
-      console.error("Failed to fetch merchants", err);
-    }
-  };
-  fetchMerchants();
-}, []);
+    };
+    fetchMerchants();
+  }, []);
 
-  // Generate QRIS dengan merchant_id
+  // Generate QRIS
   useEffect(() => {
     if (!selectedMerchantId || !submittedAmount || submittedAmount <= 0) {
       setPayload("");
@@ -73,7 +72,6 @@ useEffect(() => {
     }
     
     setLoading(true);
-    // DIUBAH: Gunakan API_BASE_URL
     fetch(
       `${API_BASE_URL}/qris?merchant_id=${selectedMerchantId}&amount=${submittedAmount}`
     )
@@ -93,25 +91,19 @@ useEffect(() => {
     const merchantId = e.target.value;
     setSelectedMerchantId(merchantId);
     
-    const selected = merchants.find((m) => m.id === merchantId);
+    const selected = merchants.find((m) => m.id == merchantId);
     setSelectedMerchantInfo(selected);
     
     setInputAmount(1000);
     setSubmittedAmount(1000);
   };
 
-  const formatRupiah = new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  });
-
   return (
     <div style={styles.page}>
       <div style={styles.card}>
         <div style={styles.header}>
           <div>
-            <p style={styles.qrisText}>QRIS PAYMENT</p>
+            <p style={styles.qrisText}>QRIS PAYMENT (LEGACY)</p>
             <h1 style={styles.title}>Capstone Pay</h1>
           </div>
           <div style={styles.liveBadge}>
@@ -128,7 +120,7 @@ useEffect(() => {
             onChange={handleMerchantChange}
             style={styles.selectDropdown}
           >
-            <option value="">-- Select Merchant --</option>
+            <option value="">-- Pilih Merchant --</option>
             {merchants.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.merchant_name}
@@ -139,7 +131,7 @@ useEffect(() => {
 
         <div style={styles.merchant}>
           <h2 style={{ color: "black" }}>
-            {selectedMerchantInfo?.merchant_name || "Select Merchant"}
+            {selectedMerchantInfo?.merchant_name || "Pilih Merchant"}
           </h2>
           <p style={{ color: "black" }}>
             {selectedMerchantInfo?.qr_id || ""}
@@ -184,11 +176,11 @@ useEffect(() => {
         </div>
 
         <p style={styles.instruction}>
-          Scan this QR to pay using any QRIS-supported app
+          Scan this QR to pay (LEGACY)
         </p>
 
         <div style={styles.logoRow}>
-          {["QRIS Supported", "All Banks", "E-Wallet"].map((b) => (
+          {["LEGACY", "Pure DB", "No Cache"].map((b) => (
             <span key={b} style={styles.logo}>
               {b}
             </span>
@@ -216,7 +208,7 @@ const styles = {
     boxShadow: "0 15px 40px rgba(0,0,0,0.12)",
   },
   header: {
-    background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+    background: "linear-gradient(135deg, #8b8b8b, #363636)",
     color: "white",
     padding: "20px",
     display: "flex",
@@ -272,7 +264,7 @@ const styles = {
   amountBox: {
     margin: "0 20px",
     padding: "16px",
-    background: "#fce7e7",
+    background: "#cecece",
     borderRadius: "16px",
     textAlign: "center",
   },
@@ -291,13 +283,13 @@ const styles = {
   },
   generateButton: {
     padding: "8px 16px",
-    background: "#ef4444",
+    background: "#363636",
     color: "white",
     border: "none",
     borderRadius: "8px",
     fontWeight: "bold",
     cursor: "pointer",
-    boxShadow: "0 4px 6px rgba(239, 68, 68, 0.3)",
+    boxShadow: "0 4px 6px rgba(71, 71, 71, 0.3)",
   },
   qrWrapper: {
     margin: "20px",
@@ -312,7 +304,7 @@ const styles = {
     position: "absolute",
     width: "100%",
     height: "3px",
-    background: "rgba(255,0,0,0.4)",
+    background: "rgba(47, 47, 47, 0.4)",
     top: "50%",
     animation: "scan 2s infinite",
   },

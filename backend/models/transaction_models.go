@@ -2,33 +2,29 @@ package models
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type Transaction struct {
-    ID         uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-    MerchantID uuid.UUID `gorm:"column:merchant_id;type:uuid;index"`
-    Amount     float64   `gorm:"type:decimal(15,2);not null"`
-    Status     string    `gorm:"type:varchar(20);default:'PENDING'"`
-    CreatedAt  time.Time `gorm:"autoCreateTime"`
-
-    Merchant   Merchant  `gorm:"foreignKey:MerchantID"`
+	ID         int       `gorm:"primaryKey" json:"id"`
+	MerchantID int       `gorm:"column:merchant_id" json:"merchant_id"` // Loose FK
+	Amount     int64     `gorm:"column:amount;type:bigint;not null" json:"amount"`
+	Status     string    `gorm:"column:status;type:text;default:'PENDING'" json:"status"`
+	CreatedAt  time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 }
 
 // ScanQRRequest - payload dari client saat scan QR
 type ScanQRRequest struct {
-	QRPayload  string  `json:"qr_payload" binding:"required"`
-	MerchantID string  `json:"merchant_id" binding:"required"`
-	Amount     float64 `json:"amount" binding:"required,gt=0"`
+	QRPayload  string `json:"qr_payload" binding:"required"`
+	MerchantID int    `json:"merchant_id" binding:"required"`
+	Amount     int64  `json:"amount" binding:"required,gt=0"`
 }
 
 // TransactionResponse - response untuk client
 type TransactionResponse struct {
-	TransactionID string    `json:"transaction_id"`
-	MerchantID    string    `json:"merchant_id"`
-	Amount        float64   `json:"amount"`
+	TransactionID int       `json:"transaction_id"`
+	MerchantID    int       `json:"merchant_id"`
+	Amount        int64     `json:"amount"`
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
-	CachedFrom    bool      `json:"cached_from,omitempty"`
+	QueryTime     int64     `json:"query_time_ms,omitempty"` // Untuk benchmark
 }

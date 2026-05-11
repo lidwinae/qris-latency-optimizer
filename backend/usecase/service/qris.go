@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GenerateDynamic - generate QRIS dengan merchant_id dan amount
-func GenerateDynamic(c *gin.Context) {
+// GenerateDynamicLegacy - generate QRIS untuk legacy (tanpa caching)
+func GenerateDynamicLegacy(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	amountStr := c.Query("amount")
 
@@ -30,16 +30,26 @@ func GenerateDynamic(c *gin.Context) {
 		return
 	}
 
+	// LEGACY: Query merchant dengan INT ID
 	var merchant models.Merchant
-	if err := database.DB.Where("id = ? AND is_active = ?", merchantIDStr, true).First(&merchant).Error; err != nil {
+	merchantID := 0
+	if _, err := strconv.Atoi(merchantIDStr); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid merchant_id format",
+		})
+		return
+	}
+	merchantID, _ = strconv.Atoi(merchantIDStr)
+
+	if err := database.DB.Where("id = ?", merchantID).First(&merchant).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "merchant not found",
 		})
 		return
 	}
 
-	// DIUBAH: Pass UUID merchant ke function
-	qr := GenerateQRISWithMerchant(amount, merchant.MerchantName, merchant.ID.String())
+	// Generate QRIS dengan merchant ID (bukan UUID)
+	qr := GenerateQRISLegacy(amount, merchant.MerchantName, strconv.Itoa(merchant.ID))
 
 	c.JSON(http.StatusOK, gin.H{
 		"qris_payload": qr,
@@ -48,8 +58,8 @@ func GenerateDynamic(c *gin.Context) {
 	})
 }
 
-// DIUBAH: Function sekarang terima merchantID sebagai parameter
-func GenerateQRISWithMerchant(amount int, merchantName string, merchantID string) string {
+// GenerateQRISLegacy - generate QRIS dengan merchant ID integer
+func GenerateQRISLegacy(amount int, merchantName string, merchantID string) string {
 	payload := ""
 
 	// payload format
@@ -58,10 +68,10 @@ func GenerateQRISWithMerchant(amount int, merchantName string, merchantID string
 	// dynamic QR
 	payload += tlv("01", "12")
 
-	// merchant info dengan UUID yang benar
+	// merchant info
 	merchant := ""
 	merchant += tlv("00", "ID.CO.QRIS.WWW")
-	merchant += tlv("01", merchantID) // ← DIUBAH: Pakai UUID merchant dari DB
+	merchant += tlv("01", merchantID) // Bisa pakai integer ID langsung
 	payload += tlv("26", merchant)
 
 	// MCC
@@ -79,7 +89,7 @@ func GenerateQRISWithMerchant(amount int, merchantName string, merchantID string
 	// merchant name
 	payload += tlv("59", merchantName)
 
-	// city (bisa dari DB juga kalau mau)
+	// city
 	payload += tlv("60", "INDONESIA")
 
 	// CRC placeholder

@@ -16,5 +16,5 @@ func main() {
 	r := gin.Default()
 	handler.Rest(r)
 
-	r.Run()
+	r.Run(":8081")
 }

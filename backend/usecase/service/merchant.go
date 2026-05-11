@@ -8,19 +8,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetMerchants - endpoint untuk fetch semua merchant dari DB
-func GetMerchants(c *gin.Context) {
+// GetMerchantsLegacy - fetch merchant tanpa caching
+func GetMerchantsLegacy(c *gin.Context) {
 	var merchants []models.Merchant
 
-	// Query semua merchant yang aktif dari database
-	if err := database.DB.Where("is_active = ?", true).Find(&merchants).Error; err != nil {
+	// Pure database query - no cache
+	if err := database.DB.Find(&merchants).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to fetch merchants",
 		})
 		return
 	}
 
-	// Return response dengan format yang sesuai frontend
 	c.JSON(http.StatusOK, gin.H{
 		"merchants": merchants,
 	})

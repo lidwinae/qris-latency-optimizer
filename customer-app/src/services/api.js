@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const currentHostname = window.location.hostname;
-const API_BASE_URL = `http://${currentHostname}:8080/api`;
+const API_BASE_URL = `http://${currentHostname}:8081/api/legacy`; // ← LEGACY ENDPOINT
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,7 +10,7 @@ const api = axios.create({
   },
 });
 
-// BARU: Extract merchant ID dari QRIS payload
+// Extract merchant ID dari QRIS payload
 export const extractMerchantFromQRIS = (payload) => {
   if (!payload) return null;
   
@@ -23,9 +23,7 @@ export const extractMerchantFromQRIS = (payload) => {
     
     const value = payload.substring(i + 4, i + 4 + len);
     
-    // Tag 26 = Merchant Information yang berisi ID merchant
     if (tag === "26") {
-      // Parse merchant info yang berformat TLV juga
       let j = 0;
       while (j < value.length - 4) {
         const innerTag = value.substring(j, j + 2);
@@ -35,9 +33,8 @@ export const extractMerchantFromQRIS = (payload) => {
         
         const innerValue = value.substring(j + 4, j + 4 + innerLen);
         
-        // Tag 01 dalam merchant info = merchant ID
         if (innerTag === "01") {
-          return innerValue;
+          return parseInt(innerValue, 10); // Parse sebagai INT untuk legacy
         }
         
         j += 4 + innerLen;
@@ -50,7 +47,7 @@ export const extractMerchantFromQRIS = (payload) => {
   return null;
 };
 
-// BARU: Extract amount dari QRIS payload
+// Extract amount dari QRIS payload
 export const extractAmountFromQRIS = (payload) => {
   if (!payload) return 0;
   
@@ -63,7 +60,6 @@ export const extractAmountFromQRIS = (payload) => {
     
     const value = payload.substring(i + 4, i + 4 + len);
     
-    // Tag 54 = Amount
     if (tag === "54") {
       return parseInt(value, 10);
     }
@@ -79,8 +75,8 @@ export const scanQR = async (qrPayload, merchantId, amount) => {
   try {
     const response = await api.post('/transactions/scan', {
       qr_payload: qrPayload,
-      merchant_id: merchantId,
-      amount: parseFloat(amount),
+      merchant_id: parseInt(merchantId, 10), // ← Ensure INT
+      amount: parseInt(amount, 10),
     });
     return response.data;
   } catch (error) {
