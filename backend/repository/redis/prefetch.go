@@ -1,106 +1,107 @@
 package redis
 
-import (
-	"context"
-	"encoding/json"
-	"log"
+// import (
+// 	"context"
+// 	"encoding/json"
+// 	"log"
 
-	"qris-latency-optimizer/backend/config"
-	"qris-latency-optimizer/backend/models"
-)
+// 	"qris-latency-optimizer/models"
+// 	"qris-latency-optimizer/config"
 
-// PrefetchMerchant ambil 1 merchant dari DB dan simpan ke Redis
-// Dipanggil secara async: go PrefetchMerchant(qrID)
-func PrefetchMerchant(qrID string) {
-	if !config.RedisAvailable {
-		return
-	}
+// )
 
-	ctx := context.Background()
-	cacheKey := "merchant:" + qrID
+// // PrefetchMerchant ambil 1 merchant dari DB dan simpan ke Redis
+// // Dipanggil secara async: go PrefetchMerchant(qrID)
+// func PrefetchMerchant(qrID string) {
+// 	if !config.RedisAvailable {
+// 		return
+// 	}
 
-	// Skip kalau sudah ada di cache
-	if Exists(ctx, cacheKey) {
-		return
-	}
+// 	ctx := context.Background()
+// 	cacheKey := "merchant:" + qrID
 
-	log.Printf("[PREFETCH] Memuat merchant %s ke cache...", qrID)
+// 	// Skip kalau sudah ada di cache
+// 	if Exists(ctx, cacheKey) {
+// 		return
+// 	}
 
-	var merchant models.Merchant
-	result := config.DB.Where("qr_id = ? AND is_active = true", qrID).First(&merchant)
-	if result.Error != nil {
-		log.Printf("[PREFETCH] Merchant %s tidak ditemukan: %v", qrID, result.Error)
-		return
-	}
+// 	log.Printf("[PREFETCH] Memuat merchant %s ke cache...", qrID)
 
-	data, err := json.Marshal(merchant)
-	if err != nil {
-		log.Printf("[PREFETCH] Gagal marshal: %v", err)
-		return
-	}
+// 	var merchant models.Merchant
+// 	result := config.DB.Where("qr_id = ? AND is_active = true", qrID).First(&merchant)
+// 	if result.Error != nil {
+// 		log.Printf("[PREFETCH] Merchant %s tidak ditemukan: %v", qrID, result.Error)
+// 		return
+// 	}
 
-	Set(ctx, cacheKey, string(data), TTLMerchant)
-	log.Printf("[PREFETCH] ✅ Merchant %s berhasil di-prefetch", qrID)
-}
+// 	data, err := json.Marshal(merchant)
+// 	if err != nil {
+// 		log.Printf("[PREFETCH] Gagal marshal: %v", err)
+// 		return
+// 	}
 
-// PrefetchRelatedMerchants prefetch merchant lain yang mungkin diakses berikutnya
-// Strategi: setelah user inquiry merchant A, load merchant lain ke cache secara spekulatif
-func PrefetchRelatedMerchants(currentQrID string) {
-	if !config.RedisAvailable {
-		return
-	}
+// 	Set(ctx, cacheKey, string(data), TTLMerchant)
+// 	log.Printf("[PREFETCH] ✅ Merchant %s berhasil di-prefetch", qrID)
+// }
 
-	ctx := context.Background()
-	log.Printf("[PREFETCH] Memuat merchant terkait untuk %s...", currentQrID)
+// // PrefetchRelatedMerchants prefetch merchant lain yang mungkin diakses berikutnya
+// // Strategi: setelah user inquiry merchant A, load merchant lain ke cache secara spekulatif
+// func PrefetchRelatedMerchants(currentQrID string) {
+// 	if !config.RedisAvailable {
+// 		return
+// 	}
 
-	var merchants []models.Merchant
-	config.DB.
-		Where("is_active = true AND qr_id != ?", currentQrID).
-		Limit(5).
-		Find(&merchants)
+// 	ctx := context.Background()
+// 	log.Printf("[PREFETCH] Memuat merchant terkait untuk %s...", currentQrID)
 
-	count := 0
-	for _, merchant := range merchants {
-		cacheKey := "merchant:" + merchant.QRID
-		if Exists(ctx, cacheKey) {
-			continue
-		}
-		data, err := json.Marshal(merchant)
-		if err != nil {
-			continue
-		}
-		// TTL setengah dari normal karena ini prefetch spekulatif
-		Set(ctx, cacheKey, string(data), TTLMerchant/2)
-		count++
-	}
+// 	var merchants []models.Merchant
+// 	config.DB.
+// 		Where("is_active = true AND qr_id != ?", currentQrID).
+// 		Limit(5).
+// 		Find(&merchants)
 
-	log.Printf("[PREFETCH] ✅ %d merchant terkait di-prefetch", count)
-}
+// 	count := 0
+// 	for _, merchant := range merchants {
+// 		cacheKey := "merchant:" + merchant.QRID
+// 		if Exists(ctx, cacheKey) {
+// 			continue
+// 		}
+// 		data, err := json.Marshal(merchant)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		// TTL setengah dari normal karena ini prefetch spekulatif
+// 		Set(ctx, cacheKey, string(data), TTLMerchant/2)
+// 		count++
+// 	}
 
-// WarmUpCache isi Redis dengan semua merchant aktif saat server pertama start
-// Tujuan: hindari cold-start (semua request pertama harus ke DB)
-func WarmUpCache() {
-	if !config.RedisAvailable {
-		log.Println("[WARMUP] Redis tidak aktif, skip warm-up")
-		return
-	}
+// 	log.Printf("[PREFETCH] ✅ %d merchant terkait di-prefetch", count)
+// }
 
-	ctx := context.Background()
-	log.Println("[WARMUP] Memulai cache warm-up...")
+// // WarmUpCache isi Redis dengan semua merchant aktif saat server pertama start
+// // Tujuan: hindari cold-start (semua request pertama harus ke DB)
+// func WarmUpCache() {
+// 	if !config.RedisAvailable {
+// 		log.Println("[WARMUP] Redis tidak aktif, skip warm-up")
+// 		return
+// 	}
 
-	var merchants []models.Merchant
-	config.DB.Where("is_active = true").Find(&merchants)
+// 	ctx := context.Background()
+// 	log.Println("[WARMUP] Memulai cache warm-up...")
 
-	count := 0
-	for _, merchant := range merchants {
-		cacheKey := "merchant:" + merchant.QRID
-		data, err := json.Marshal(merchant)
-		if err != nil {
-			continue
-		}
-		Set(ctx, cacheKey, string(data), TTLMerchant)
-		count++
-	}
+// 	var merchants []models.Merchant
+// 	config.DB.Where("is_active = true").Find(&merchants)
 
-	log.Printf("[WARMUP] ✅ %d merchant berhasil di-load ke cache", count)
-}
+// 	count := 0
+// 	for _, merchant := range merchants {
+// 		cacheKey := "merchant:" + merchant.QRID
+// 		data, err := json.Marshal(merchant)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		Set(ctx, cacheKey, string(data), TTLMerchant)
+// 		count++
+// 	}
+
+// 	log.Printf("[WARMUP] ✅ %d merchant berhasil di-load ke cache", count)
+// }

@@ -6,15 +6,24 @@ import (
 	"os"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 )
 
-var RedisClient *redis.Client
+var RedisClient *goredis.Client
+var RedisAvailable bool
+
+// TTL constants
+const (
+	TTLTransaction = 10 * time.Minute
+	TTLMerchant    = 30 * time.Minute
+	TTLInquiry     = 2 * time.Minute
+)
 
 func init() {
 	ConnectRedis()
 }
 
+// ConnectRedis - koneksi ke Redis
 func ConnectRedis() {
 	redisHost := os.Getenv("REDIS_HOST")
 	if redisHost == "" {
@@ -26,7 +35,7 @@ func ConnectRedis() {
 		redisPort = "6379"
 	}
 
-	RedisClient = redis.NewClient(&redis.Options{
+	RedisClient = goredis.NewClient(&goredis.Options{
 		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
 
@@ -35,31 +44,49 @@ func ConnectRedis() {
 
 	err := RedisClient.Ping(ctx).Err()
 	if err != nil {
-		fmt.Printf("Redis connection failed: %v (will continue without cache)\n", err)
-	} else {
-		fmt.Println("✓ Redis connected successfully")
+		RedisAvailable = false
+		fmt.Printf("Redis connection failed: %v (running without cache)\n", err)
+		return
 	}
-}
 
-// Set - simpan data ke Redis dengan TTL
-func Set(key string, value string, expiration time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	return RedisClient.Set(ctx, key, value, expiration).Err()
+	RedisAvailable = true
+	fmt.Println("✓ Redis connected successfully")
 }
 
 // Get - ambil data dari Redis
+// Return:
+// value, nil => cache HIT
+// "", error  => cache MISS / redis error
 func Get(key string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if !RedisAvailable {
+		return "", fmt.Errorf("redis unavailable")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	return RedisClient.Get(ctx, key).Result()
 }
 
-// Delete - hapus data dari Redis
+// Set - simpan data ke Redis
+func Set(key string, value string, expiration time.Duration) error {
+	if !RedisAvailable {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	return RedisClient.Set(ctx, key, value, expiration).Err()
+}
+
+// Delete - hapus cache
 func Delete(key string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if !RedisAvailable {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	return RedisClient.Del(ctx, key).Err()
@@ -67,9 +94,17 @@ func Delete(key string) error {
 
 // Exists - cek apakah key ada
 func Exists(key string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if !RedisAvailable {
+		return false, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	result := RedisClient.Exists(ctx, key)
-	return result.Val() > 0, result.Err()
+	count, err := RedisClient.Exists(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }
