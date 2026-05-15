@@ -1,0 +1,177 @@
+QRIS Latency Optimizer Flow
+===========================
+
+1. Merchant Data
+----------------
+- Backend starts from backend/cmd/main.go.
+- Backend loads backend/.env.
+- Backend connects to Postgres.
+- Backend runs GORM AutoMigrate for merchants and transactions.
+- Backend seeds default merchants in repository/database/connectdb.go.
+- Backend connects to Redis.
+- Backend warms merchant cache in Redis with all active merchants.
+
+
+2. Merchant List Flow
+---------------------
+Endpoint:
+GET /api/merchants
+
+Flow:
+- Frontend requests active merchants.
+- Backend queries Postgres merchants table where is_active = true.
+- Backend returns merchant list.
+- Frontend uses merchant UUID as selected merchant_id.
+
+
+3. Generate QRIS Flow
+---------------------
+Endpoint:
+GET /api/qris?merchant_id=<merchant_uuid>&amount=<amount>
+
+Flow:
+- Frontend sends merchant UUID and amount.
+- Backend validates amount.
+- Backend checks merchant_id exists and merchant is active.
+- Backend builds QRIS payload in usecase/service/payload.go.
+- QRIS payload includes:
+  - tag 00: payload format indicator
+  - tag 01: dynamic QR indicator
+  - tag 26: merchant account info
+  - tag 26.00: QRIS domain
+  - tag 26.01: merchant QRID, for example TEST001
+  - tag 52: merchant category code
+  - tag 53: IDR currency code
+  - tag 54: amount
+  - tag 58: country ID
+  - tag 59: merchant name
+  - tag 60: city, MALANG
+  - tag 63: CRC checksum
+- Backend caches merchant data in Redis.
+- Backend starts related merchant prefetch in Redis.
+- Backend returns qris_payload to frontend.
+
+
+4. Customer Scan Flow
+---------------------
+Endpoint:
+POST /api/transactions/scan
+
+Request body:
+{
+  "qr_payload": "<qris_payload>",
+  "merchant_id": "TEST001",
+  "amount": 1000
+}
+
+Flow:
+- Customer app scans QR.
+- Customer app parses QR payload locally.
+- Customer app extracts merchant QRID from QRIS tag 26.01.
+- Customer app extracts amount from QRIS tag 54.
+- Customer app submits qr_payload, merchant_id, and amount to backend.
+- Backend accepts merchant_id as either:
+  - merchant UUID
+  - merchant QRID, for example TEST001
+- If merchant_id is QRID, backend checks Redis merchant cache first.
+- If merchant is not cached, backend queries Postgres.
+- Backend validates merchant exists and is active.
+- Backend parses QR payload server-side.
+- Backend validates QR CRC.
+- Backend validates QR payload merchant QRID matches selected merchant.
+- Backend validates QR payload amount matches request amount.
+- Backend creates transaction in Postgres with status PENDING.
+- Backend stores transaction JSON in Redis:
+  - key: transaction:<transaction_id>
+  - TTL: 10 minutes
+- Backend returns created transaction data.
+
+
+5. Transaction Status Flow
+--------------------------
+Endpoint:
+GET /api/transactions/:id
+
+Flow:
+- Customer app requests transaction status.
+- Backend validates transaction ID is UUID.
+- Backend checks Redis first:
+  - key: transaction:<transaction_id>
+- If Redis cache hit:
+  - Backend unmarshals transaction JSON.
+  - Backend returns transaction data.
+  - Response message: transaction data (from cache)
+- If Redis cache missing or corrupted:
+  - Backend queries Postgres.
+  - Backend caches fresh transaction JSON in Redis.
+  - Backend returns transaction data.
+  - Response message: transaction data (from database)
+
+
+6. Confirm Payment Flow
+-----------------------
+Endpoint:
+POST /api/transactions/:id/confirm
+
+Flow:
+- Customer app confirms payment.
+- Backend validates transaction ID is UUID.
+- Backend updates transaction status in Postgres to SUCCESS.
+- Backend checks rows affected.
+- If no row was updated, backend returns transaction not found.
+- Backend deletes Redis cache key:
+  - transaction:<transaction_id>
+- Backend reads updated transaction from Postgres.
+- Backend returns updated transaction data.
+- Next status request reads Postgres first, then caches SUCCESS transaction again.
+- Later status requests return SUCCESS from Redis cache.
+
+
+7. Redis Purpose
+----------------
+Redis is used as temporary cache.
+
+Transaction cache:
+- Reduces repeated Postgres reads for transaction status polling.
+- Keeps status checks faster.
+- Cache key format:
+  - transaction:<transaction_id>
+
+Merchant cache:
+- Stores active merchant data.
+- Speeds up QRID-based merchant lookup during scan.
+- Cache key format:
+  - merchant:<qr_id>
+
+Redis behavior:
+- If Redis is down, backend still works.
+- Cache reads miss.
+- Cache writes are skipped.
+- Postgres remains source of truth.
+
+
+8. Important IDs
+----------------
+Merchant has two identifiers:
+
+ID:
+- UUID primary key in Postgres.
+- Used internally as merchant_id.
+- Example:
+  c75666bb-355f-4a33-90b2-bca767040be3
+
+QRID:
+- Merchant QR identifier stored in qr_id column.
+- Used inside QRIS payload tag 26.01.
+- Example:
+  TEST001
+
+
+9. Main Routes
+--------------
+GET  /api/ping
+GET  /api/merchants
+GET  /api/qris?merchant_id=<merchant_uuid>&amount=<amount>
+POST /api/transactions/scan
+GET  /api/transactions/:id
+POST /api/transactions/:id/confirm

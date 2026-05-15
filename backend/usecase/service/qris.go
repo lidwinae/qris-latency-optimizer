@@ -1,16 +1,20 @@
 package service
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"qris-latency-optimizer/models"
 	"qris-latency-optimizer/repository/database"
+	"qris-latency-optimizer/repository/redis"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-// GenerateDynamic - generate QRIS dengan merchant_id dan amount
+// Generate QRIS Dynamic
 func GenerateDynamic(c *gin.Context) {
 	merchantIDStr := c.Query("merchant_id")
 	amountStr := c.Query("amount")
@@ -37,9 +41,16 @@ func GenerateDynamic(c *gin.Context) {
 		})
 		return
 	}
+	redis.CacheMerchant(merchant)
+	go redis.PrefetchRelatedMerchants(merchant.QRID)
 
-	// DIUBAH: Pass UUID merchant ke function
-	qr := GenerateQRISWithMerchant(amount, merchant.MerchantName, merchant.ID.String())
+	qr, err := GeneratePayload(amount, merchant.MerchantName, merchant.QRID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"qris_payload": qr,
@@ -48,45 +59,71 @@ func GenerateDynamic(c *gin.Context) {
 	})
 }
 
-// DIUBAH: Function sekarang terima merchantID sebagai parameter
-func GenerateQRISWithMerchant(amount int, merchantName string, merchantID string) string {
-	payload := ""
+// GetTransactionStatus - endpoint untuk check status transaksi
+func GetTransactionStatus(c *gin.Context) {
+	transactionID := c.Param("id")
 
-	// payload format
-	payload += tlv("00", "01")
+	// Validasi UUID
+	if _, err := uuid.Parse(transactionID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid transaction id",
+		})
+		return
+	}
 
-	// dynamic QR
-	payload += tlv("01", "12")
+	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
 
-	// merchant info dengan UUID yang benar
-	merchant := ""
-	merchant += tlv("00", "ID.CO.QRIS.WWW")
-	merchant += tlv("01", merchantID) // ← DIUBAH: Pakai UUID merchant dari DB
-	payload += tlv("26", merchant)
+	// Cek di Redis dulu (cache)
+	cachedData, err := redis.Get(cacheKey)
 
-	// MCC
-	payload += tlv("52", "5411")
+	if err == nil && cachedData != "" {
+		// Cache hit!
+		var transaction models.Transaction
+		if err := json.Unmarshal([]byte(cachedData), &transaction); err == nil {
+			response := models.TransactionResponse{
+				TransactionID: transactionID,
+				MerchantID:    transaction.MerchantID.String(),
+				Amount:        transaction.Amount,
+				Status:        transaction.Status,
+				CreatedAt:     transaction.CreatedAt,
+				CachedFrom:    true,
+			}
 
-	// currency IDR
-	payload += tlv("53", "360")
+			c.JSON(http.StatusOK, gin.H{
+				"data":    response,
+				"message": "transaction data (from cache)",
+			})
+			return
+		}
 
-	// amount
-	payload += tlv("54", strconv.Itoa(amount))
+		_ = redis.Delete(cacheKey)
+	}
 
-	// country
-	payload += tlv("58", "ID")
+	// Cache miss - query database
+	var transaction models.Transaction
+	if err := database.DB.First(&transaction, "id = ?", transactionID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "transaction not found",
+		})
+		return
+	}
 
-	// merchant name
-	payload += tlv("59", merchantName)
+	// Simpan ke Redis untuk next request
+	if transactionJSON, err := json.Marshal(transaction); err == nil {
+		_ = redis.Set(cacheKey, string(transactionJSON), redis.TTLTransaction)
+	}
 
-	// city (bisa dari DB juga kalau mau)
-	payload += tlv("60", "INDONESIA")
+	response := models.TransactionResponse{
+		TransactionID: transactionID,
+		MerchantID:    transaction.MerchantID.String(),
+		Amount:        transaction.Amount,
+		Status:        transaction.Status,
+		CreatedAt:     transaction.CreatedAt,
+		CachedFrom:    false,
+	}
 
-	// CRC placeholder
-	payload += "6304"
-
-	crc := crc16(payload)
-	payload += crc
-
-	return payload
+	c.JSON(http.StatusOK, gin.H{
+		"data":    response,
+		"message": "transaction data (from database)",
+	})
 }

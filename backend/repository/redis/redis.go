@@ -19,10 +19,6 @@ const (
 	TTLInquiry     = 2 * time.Minute
 )
 
-func init() {
-	ConnectRedis()
-}
-
 // ConnectRedis - koneksi ke Redis
 func ConnectRedis() {
 	redisHost := os.Getenv("REDIS_HOST")
