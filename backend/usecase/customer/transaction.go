@@ -7,6 +7,7 @@ import (
 	"qris-latency-optimizer/models"
 	"qris-latency-optimizer/repository/database"
 	"qris-latency-optimizer/repository/redis"
+	"qris-latency-optimizer/usecase/service"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,14 +26,56 @@ func ScanQR(c *gin.Context) {
 		return
 	}
 
-	// Generate transaction ID
-	transactionID := uuid.New().String()
-	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
+	var merchant models.Merchant
+	merchantID, err := uuid.Parse(req.MerchantID)
+	if err == nil {
+		if err := database.DB.Where("id = ? AND is_active = ?", merchantID, true).First(&merchant).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "merchant not found",
+			})
+			return
+		}
+	} else {
+		if cachedMerchant, ok := redis.GetMerchant(req.MerchantID); ok {
+			merchant = *cachedMerchant
+		} else if err := database.DB.Where("qr_id = ? AND is_active = ?", req.MerchantID, true).First(&merchant).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "merchant not found",
+			})
+			return
+		} else {
+			redis.CacheMerchant(merchant)
+		}
+	}
+	merchantID = merchant.ID
+
+	qrMerchantID, qrAmount, err := service.ParsePayload(req.QRPayload)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+	if qrMerchantID != merchant.QRID {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "qr payload merchant does not match merchant id",
+		})
+		return
+	}
+	if float64(qrAmount) != req.Amount {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "qr payload amount does not match amount",
+		})
+		return
+	}
+
+	transactionID := uuid.New()
+	cacheKey := fmt.Sprintf("transaction:%s", transactionID.String())
 
 	// Buat transaction model
 	transaction := models.Transaction{
-		ID:         uuid.MustParse(transactionID),
-		MerchantID: uuid.MustParse(req.MerchantID),
+		ID:         transactionID,
+		MerchantID: merchantID,
 		Amount:     req.Amount,
 		Status:     "PENDING",
 		CreatedAt:  time.Now(),
@@ -46,13 +89,14 @@ func ScanQR(c *gin.Context) {
 		return
 	}
 
-	// Simpan ke Redis dengan TTL 10 menit
-	transactionJSON, _ := json.Marshal(transaction)
-	redis.Set(cacheKey, string(transactionJSON), 10*time.Minute)
+	// Simpan ke Redis dengan TTL transaksi
+	if transactionJSON, err := json.Marshal(transaction); err == nil {
+		_ = redis.Set(cacheKey, string(transactionJSON), redis.TTLTransaction)
+	}
 
 	response := models.TransactionResponse{
-		TransactionID: transactionID,
-		MerchantID:    req.MerchantID,
+		TransactionID: transactionID.String(),
+		MerchantID:    merchantID.String(),
 		Amount:        req.Amount,
 		Status:        "PENDING",
 		CreatedAt:     transaction.CreatedAt,
@@ -80,22 +124,33 @@ func ConfirmPayment(c *gin.Context) {
 	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
 
 	// Update di database
-	if err := database.DB.Model(&models.Transaction{}).
+	result := database.DB.Model(&models.Transaction{}).
 		Where("id = ?", transactionID).
-		Update("status", "SUCCESS").Error; err != nil {
+		Update("status", "SUCCESS")
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to confirm payment: " + err.Error(),
+			"error": "failed to confirm payment: " + result.Error.Error(),
+		})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "transaction not found",
 		})
 		return
 	}
 
 	// Hapus dari cache (invalidate)
 	redis.Delete(cacheKey)
-	fmt.Println("✓ Cache invalidated after payment confirmation")
 
 	// Ambil data transaksi yang sudah updated
 	var transaction models.Transaction
-	database.DB.First(&transaction, "id = ?", transactionID)
+	if err := database.DB.First(&transaction, "id = ?", transactionID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "transaction not found",
+		})
+		return
+	}
 
 	response := models.TransactionResponse{
 		TransactionID: transactionID,

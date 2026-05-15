@@ -1,70 +1,341 @@
 # QRIS Latency Optimizer 🚀
 
-This project is a full-stack QRIS payment system designed to handle extremely low-latency API responses. It implements a cache-aside architecture using Redis to optimize transaction status polling and a complete monitoring stack to analyze system performance.
+Full-stack QRIS payment simulation with:
+- Go backend
+- merchant dashboard
+- customer scanner app
+- Postgres for source of truth
+- Redis for cache and prefetch
+- monitoring tools for load testing
 
-## 📂 Project Structure
+## Project Structure
 
-This repository is organized as a monorepo containing the backend, merchant UI, and customer UI:
+- `backend/`
+  - Go API with Gin
+  - QR generation
+  - transaction lifecycle
+  - Redis cache and merchant prefetch
+- `frontend/`
+  - merchant dashboard
+  - React + Vite
+  - default port `5173`
+- `customer-app/`
+  - customer QR scanner app
+  - React + Vite
+  - default port `5174`
 
-- **`/backend`**: The Go backend (Gin framework). Handles QR generation, transaction lifecycle, and caching logic.
-- **`/frontend`**: The **Merchant Dashboard** UI (React + Vite). Runs on port 5173.
-- **`/customer-app`**: The **Customer Mobile** UI (React + Vite). Runs on port 5174.
+## Stack
 
-## 🛠️ Tech Stack & Infrastructure
+- Go + Gin
+- PostgreSQL
+- Redis
+- RedisInsight
+- pgAdmin
+- InfluxDB
+- Grafana
 
-The system runs several core services via Docker:
+## Current Architecture Notes
 
-- **PostgreSQL**: Primary persistent storage for transaction data.
-- **Redis**: Caching layer for high-speed transaction status checks (Key to P95 latency optimization).
-- **RabbitMQ**: Message broker for handling asynchronous tasks and background processing.
-- **pgAdmin**: Web interface for managing the PostgreSQL database (Port 5050).
-- **Monitoring Stack**: 
-  - **InfluxDB**: Time-series database to store load test metrics from k6.
-  - **Grafana**: Dashboard for real-time visualization of system metrics and latency (Port 3000).
+- Postgres is source of truth.
+- Redis is optional acceleration layer.
+- Merchant data is seeded from Go startup, not SQL init file.
+- Backend auto-creates DB schema with GORM `AutoMigrate`.
+- Merchant cache is warmed into Redis on backend startup.
+- Transaction status uses cache-aside pattern:
+  - Redis first
+  - Postgres fallback
+  - cache repopulated after DB read
 
----
-
-## 🚀 How to Run
+## How To Run
 
 ### Prerequisites
-Before starting, ensure that **Docker Desktop** or the **Docker Engine** is already running on your machine. You will also need **Node.js** and **Go** installed locally for development.
 
-### 1. Start the Infrastructure
-Navigate to the root project folder and run the following command to start all databases and monitoring tools:
-```bash
-docker-compose up -d
-```
+Need:
+- Docker / Docker Desktop running
+- Go installed
+- Node.js installed
 
-### 2. Start the Backend API
-Open a terminal and run:
+## 1. Start Infrastructure
+
+Run Docker services from `backend/`:
+
 ```bash
 cd backend
-# Ensure your .env is configured (DB_HOST=localhost)
-go run cmd/main.go
+docker compose up -d
 ```
-*(The backend runs on http://localhost:8080)*
 
-### 3. Start the Frontend UI / Merchant App
-Open a new terminal and run:
+This starts:
+- Postgres
+- Redis
+- RedisInsight
+- pgAdmin
+- InfluxDB
+- Grafana
+
+## 2. Backend Setup
+
+Start backend:
+
+```bash
+cd backend
+go run ./cmd
+```
+
+Backend runs on:
+
+```text
+http://localhost:8080
+```
+
+## 3. Merchant Dashboard
+
 ```bash
 cd frontend
-npm install   # Required only for the first time
+npm install
 npm run dev
 ```
-*(The merchant dashboard runs on http://localhost:5173)*
 
-### 4. Start the Customer App
-Open a new terminal and run:
+Frontend runs on:
+
+```text
+http://localhost:5173
+```
+
+## 4. Customer App
+
 ```bash
 cd customer-app
-npm install   # Required only for the first time
+npm install
 npm run dev
 ```
-*(The customer app runs on http://localhost:5174)*
 
-## 📚 Architectural Details (Clean Architecture)
+Customer app runs on:
 
-The backend follows Clean Architecture principles:
-- **`usecase/customer`**: Contains endpoints mimicking customer actions (e.g., scanning the QR code, simulating payment confirmation).
-- **`usecase/service`**: Contains endpoints for the merchant backend (e.g., generating the dynamic QR code string, checking transaction status).
-- **Latency Optimization**: The `GetTransactionStatus` API queries Redis first. If there's a cache hit, it returns immediately. On a cache miss, it fetches from PostgreSQL and re-populates Redis. When a payment is confirmed, the Redis cache is instantly invalidated to prevent stale data.
+```text
+http://localhost:5174
+```
+
+## Docker Web Tools
+
+### pgAdmin
+
+Open:
+
+```text
+http://localhost:5050
+```
+
+
+### RedisInsight
+
+Open:
+
+```text
+http://localhost:5540
+```
+
+Connect to Redis with:
+
+```text
+Host: redis
+Port: 6379
+```
+
+### Grafana
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+### InfluxDB
+
+Open:
+
+```text
+http://localhost:8086
+```
+
+## Main Backend Flow
+
+### Startup
+
+Backend startup does:
+- load `backend/.env`
+- connect Postgres
+- create `pgcrypto` extension if needed
+- auto-migrate tables
+- seed default merchants
+- connect Redis
+- warm merchant cache
+
+### Merchant Flow
+
+Endpoint:
+
+```text
+GET /api/merchants
+```
+
+Returns active merchants from Postgres.
+
+### Generate QRIS
+
+Endpoint:
+
+```text
+GET /api/qris?merchant_id=<merchant_uuid>&amount=<amount>
+```
+
+Flow:
+- validate amount
+- load merchant by UUID
+- generate dynamic QR payload
+- cache merchant in Redis
+- prefetch related merchants
+
+### Customer Scan
+
+Endpoint:
+
+```text
+POST /api/transactions/scan
+```
+
+Request body:
+
+```json
+{
+  "qr_payload": "<qris_payload>",
+  "merchant_id": "TEST001",
+  "amount": 1000
+}
+```
+
+Flow:
+- customer app scans QR
+- extracts merchant QRID and amount from payload
+- sends payload to backend
+- backend validates:
+  - merchant exists and active
+  - QR CRC valid
+  - QR merchant matches request merchant
+  - QR amount matches request amount
+- backend creates `PENDING` transaction
+- backend caches transaction in Redis
+
+### Check Transaction Status
+
+Endpoint:
+
+```text
+GET /api/transactions/:id
+```
+
+Flow:
+- validate UUID
+- check Redis key `transaction:<id>`
+- if hit, return cached data
+- if miss, query Postgres
+- cache fresh transaction result
+
+### Confirm Payment
+
+Endpoint:
+
+```text
+POST /api/transactions/:id/confirm
+```
+
+Flow:
+- validate UUID
+- update transaction to `SUCCESS`
+- delete old transaction cache
+- return updated transaction
+
+## Redis Usage
+
+### Transaction Cache
+
+Used for:
+- repeated transaction status polling
+- lower DB load
+- faster response
+
+Redis key format:
+
+```text
+transaction:<transaction_id>
+```
+
+### Merchant Cache
+
+Used for:
+- QRID-based merchant lookup
+- startup warm cache
+- speculative related-merchant prefetch
+
+Redis key format:
+
+```text
+merchant:<qr_id>
+```
+
+If Redis is down:
+- backend still works
+- cache reads miss
+- cache writes are skipped
+- Postgres remains source of truth
+
+## Important Identifiers
+
+Merchant has two identifiers:
+
+- `ID`
+  - UUID primary key
+  - used internally in backend routes
+- `QRID`
+  - QR merchant code like `TEST001`
+  - stored in `qr_id`
+  - placed into QRIS payload tag `26.01`
+
+## Main API Routes
+
+```text
+GET  /api/ping
+GET  /api/merchants
+GET  /api/qris?merchant_id=<merchant_uuid>&amount=<amount>
+POST /api/transactions/scan
+GET  /api/transactions/:id
+POST /api/transactions/:id/confirm
+```
+
+## Testing Quick Examples
+
+### Check transaction status
+
+```bash
+curl http://localhost:8080/api/transactions/<transaction_id>
+```
+
+### Confirm payment
+
+```bash
+curl -X POST http://localhost:8080/api/transactions/<transaction_id>/confirm
+```
+
+## Extra Docs
+
+- `report-purpose/flow.txt`
+- `report-purpose/flow-mermaid.md`
+- `report-purpose/changelog.md`
+
+## Notes For Phone Testing
+
+Customer app camera on phone may fail on plain LAN HTTP because browser camera access often requires secure origin.
+
+If camera does not open:
+- check browser permission
+- try Chrome/Edge on Android or Safari on iPhone
+- if testing from phone over LAN, browser security may block camera on plain `http://<ip>:5174`
