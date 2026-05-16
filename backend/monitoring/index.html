@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRIS System Monitor — Real-Time</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-card: #111827;
+      --bg-card-alt: #1a2235;
+      --border: #1e293b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-green: #22c55e;
+      --accent-green-glow: rgba(34, 197, 94, 0.15);
+      --accent-blue: #3b82f6;
+      --accent-blue-glow: rgba(59, 130, 246, 0.15);
+      --accent-purple: #a855f7;
+      --accent-purple-glow: rgba(168, 85, 247, 0.15);
+      --accent-amber: #f59e0b;
+      --accent-amber-glow: rgba(245, 158, 11, 0.15);
+      --accent-red: #ef4444;
+      --accent-red-glow: rgba(239, 68, 68, 0.15);
+      --accent-cyan: #06b6d4;
+      --accent-cyan-glow: rgba(6, 182, 212, 0.15);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .header {
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(17, 24, 39, 0.8) 0%, var(--bg-primary) 100%);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 16px; }
+
+    .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .header-title h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+    .header-title p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .header-right { display: flex; align-items: center; gap: 16px; }
+
+    .live-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--accent-green-glow);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 12px; font-weight: 500; color: var(--accent-green);
+    }
+
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+    }
+
+    .refresh-rate {
+      font-size: 12px; color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .dashboard { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+    /* Service Status Bar */
+    .status-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .status-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      transition: all 0.3s ease;
+    }
+
+    .status-item:hover { border-color: rgba(148, 163, 184, 0.2); }
+
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      flex-shrink: 0;
+      transition: background 0.5s ease;
+    }
+
+    .status-dot.online { background: var(--accent-green); box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+    .status-dot.offline { background: var(--accent-red); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+
+    .status-label { font-size: 13px; font-weight: 500; }
+    .status-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Metric Cards Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .metric-card:hover {
+      border-color: rgba(148, 163, 184, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 14px 14px 0 0;
+    }
+
+    .metric-card.cpu::before { background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan)); }
+    .metric-card.memory::before { background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue)); }
+    .metric-card.goroutines::before { background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); }
+    .metric-card.gc::before { background: linear-gradient(90deg, var(--accent-amber), var(--accent-red)); }
+
+    .metric-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+
+    .cpu .metric-icon { background: var(--accent-blue-glow); }
+    .memory .metric-icon { background: var(--accent-purple-glow); }
+    .goroutines .metric-icon { background: var(--accent-green-glow); }
+    .gc .metric-icon { background: var(--accent-amber-glow); }
+
+    .metric-label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .metric-value {
+      font-size: 32px; font-weight: 700; margin: 6px 0;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.02em;
+      transition: color 0.5s ease;
+    }
+
+    .metric-sub { font-size: 12px; color: var(--text-secondary); }
+
+    /* Charts Section */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .chart-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .chart-title { font-size: 14px; font-weight: 600; }
+
+    canvas { width: 100% !important; height: 200px !important; }
+
+    /* Memory Bars */
+    .memory-bars { margin-top: 16px; }
+
+    .mem-bar-row {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .mem-bar-label { font-size: 12px; color: var(--text-secondary); min-width: 80px; }
+
+    .mem-bar-track {
+      flex: 1; height: 8px; border-radius: 4px;
+      background: rgba(148, 163, 184, 0.1);
+      overflow: hidden;
+    }
+
+    .mem-bar-fill {
+      height: 100%; border-radius: 4px;
+      transition: width 0.8s ease;
+    }
+
+    .mem-bar-value {
+      font-size: 12px; font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+      min-width: 60px; text-align: right;
+    }
+
+    /* Uptime Footer */
+    .footer-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 12px; color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .error-overlay {
+      display: none;
+      position: fixed;
+      bottom: 20px; right: 20px;
+      background: var(--accent-red-glow);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 13px; color: var(--accent-red);
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @media (max-width: 900px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-row { grid-template-columns: 1fr; }
+      .dashboard { padding: 16px; }
+      .header { padding: 14px 16px; }
+    }
+
+    @media (max-width: 500px) {
+      .metrics-grid { grid-template-columns: 1fr; }
+      .status-bar { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">Q</div>
+      <div class="header-title">
+        <h1>QRIS System Monitor</h1>
+        <p>Real-time infrastructure dashboard</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        <span>LIVE</span>
+      </div>
+      <span class="refresh-rate" id="refreshRate">Every 2s</span>
+    </div>
+  </div>
+
+  <div class="dashboard">
+    <!-- Service Status -->
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-dot" id="statusBackend"></div>
+        <div>
+          <div class="status-label">Go Backend</div>
+          <div class="status-sub" id="statusBackendSub">Checking...</div>
+        </div>
+      </div>
+      <div class="status-item">
+        <div class="status-dot" id="statusPostgres"></div>
+        <div>
+          <div class="status-label">PostgreSQL</div>
+          <div class="status-sub">Source of truth</div>
+        </div>
+      </div>
+      <div class="status-item">
+        <div class="status-dot" id="statusRedis"></div>
+        <div>
+          <div class="status-label">Redis Cache</div>
+          <div class="status-sub" id="statusRedisSub">Checking...</div>
+        </div>
+      </div>
+      <div class="status-item">
+        <div class="status-dot" id="statusRabbitMQ"></div>
+        <div>
+          <div class="status-label">RabbitMQ</div>
+          <div class="status-sub" id="statusRabbitMQSub">Checking...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metric Cards -->
+    <div class="metrics-grid">
+      <div class="metric-card cpu">
+        <div class="metric-icon">⚡</div>
+        <div class="metric-label">CPU Usage</div>
+        <div class="metric-value" id="cpuValue">--</div>
+        <div class="metric-sub" id="cpuCores">-- cores</div>
+      </div>
+      <div class="metric-card memory">
+        <div class="metric-icon">💾</div>
+        <div class="metric-label">Memory Usage</div>
+        <div class="metric-value" id="memValue">--</div>
+        <div class="metric-sub" id="memDetail">-- / -- MB</div>
+      </div>
+      <div class="metric-card goroutines">
+        <div class="metric-icon">🧵</div>
+        <div class="metric-label">Goroutines</div>
+        <div class="metric-value" id="goroutineValue">--</div>
+        <div class="metric-sub">Active goroutines</div>
+      </div>
+      <div class="metric-card gc">
+        <div class="metric-icon">♻️</div>
+        <div class="metric-label">GC Cycles</div>
+        <div class="metric-value" id="gcValue">--</div>
+        <div class="metric-sub" id="gcPause">Pause: --</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">📈 CPU Usage (last 60 samples)</span>
+        </div>
+        <canvas id="cpuChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">📊 Memory Usage (last 60 samples)</span>
+        </div>
+        <canvas id="memChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Memory Breakdown -->
+    <div class="chart-card" style="margin-bottom: 24px;">
+      <div class="chart-header">
+        <span class="chart-title">🗄️ Memory Breakdown</span>
+      </div>
+      <div class="memory-bars">
+        <div class="mem-bar-row">
+          <span class="mem-bar-label">System</span>
+          <div class="mem-bar-track">
+            <div class="mem-bar-fill" id="memSysBar" style="width:0%; background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));"></div>
+          </div>
+          <span class="mem-bar-value" id="memSysValue">--</span>
+        </div>
+        <div class="mem-bar-row">
+          <span class="mem-bar-label">Heap Alloc</span>
+          <div class="mem-bar-track">
+            <div class="mem-bar-fill" id="memHeapBar" style="width:0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));"></div>
+          </div>
+          <span class="mem-bar-value" id="memHeapValue">--</span>
+        </div>
+        <div class="mem-bar-row">
+          <span class="mem-bar-label">Heap Sys</span>
+          <div class="mem-bar-track">
+            <div class="mem-bar-fill" id="memHeapSysBar" style="width:0%; background: linear-gradient(90deg, var(--accent-amber), var(--accent-red));"></div>
+          </div>
+          <span class="mem-bar-value" id="memHeapSysValue">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-bar">
+      <span id="uptimeDisplay">Uptime: --</span>
+      <span id="lastUpdate">Last update: --</span>
+      <span id="requestCount">Requests: 0</span>
+    </div>
+  </div>
+
+  <div class="error-overlay" id="errorOverlay"></div>
+
+  <script>
+    // ==================== CHART ENGINE (No Dependencies) ====================
+    class MiniChart {
+      constructor(canvasId, color, label) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.data = [];
+        this.maxPoints = 60;
+        this.color = color;
+        this.label = label;
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+      }
+
+      resize() {
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = 200 * dpr;
+        this.ctx.scale(dpr, dpr);
+        this.w = rect.width;
+        this.h = 200;
+        this.draw();
+      }
+
+      push(value) {
+        this.data.push(value);
+        if (this.data.length > this.maxPoints) this.data.shift();
+        this.draw();
+      }
+
+      draw() {
+        const ctx = this.ctx;
+        const w = this.w;
+        const h = this.h;
+        const data = this.data;
+
+        ctx.clearRect(0, 0, w, h);
+
+        if (data.length < 2) return;
+
+        const max = Math.max(100, ...data) * 1.1;
+        const stepX = w / (this.maxPoints - 1);
+        const padTop = 10;
+        const padBottom = 30;
+        const chartH = h - padTop - padBottom;
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = padTop + (chartH / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+
+          // Grid labels
+          const val = (max - (max / 4) * i).toFixed(0);
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+          ctx.font = '10px JetBrains Mono';
+          ctx.fillText(val + '%', 4, y - 3);
+        }
+
+        // Gradient fill
+        const gradient = ctx.createLinearGradient(0, padTop, 0, h - padBottom);
+        gradient.addColorStop(0, this.color + '30');
+        gradient.addColorStop(1, this.color + '02');
+
+        // Path
+        const offset = (this.maxPoints - data.length) * stepX;
+        ctx.beginPath();
+        ctx.moveTo(offset, padTop + chartH - (data[0] / max) * chartH);
+
+        for (let i = 1; i < data.length; i++) {
+          const x = offset + i * stepX;
+          const y = padTop + chartH - (data[i] / max) * chartH;
+          const prevX = offset + (i - 1) * stepX;
+          const prevY = padTop + chartH - (data[i - 1] / max) * chartH;
+          const cpx = (prevX + x) / 2;
+          ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+        }
+
+        // Fill
+        ctx.lineTo(offset + (data.length - 1) * stepX, h - padBottom);
+        ctx.lineTo(offset, h - padBottom);
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Stroke
+        ctx.beginPath();
+        ctx.moveTo(offset, padTop + chartH - (data[0] / max) * chartH);
+        for (let i = 1; i < data.length; i++) {
+          const x = offset + i * stepX;
+          const y = padTop + chartH - (data[i] / max) * chartH;
+          const prevX = offset + (i - 1) * stepX;
+          const prevY = padTop + chartH - (data[i - 1] / max) * chartH;
+          const cpx = (prevX + x) / 2;
+          ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+        }
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Current value dot
+        if (data.length > 0) {
+          const lastX = offset + (data.length - 1) * stepX;
+          const lastY = padTop + chartH - (data[data.length - 1] / max) * chartH;
+          ctx.beginPath();
+          ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+          ctx.fillStyle = this.color;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
+          ctx.strokeStyle = this.color + '40';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+    }
+
+    // ==================== DASHBOARD LOGIC ====================
+    const API_URL = `http://${window.location.hostname}:8080/api/monitor/system`;
+    const INTERVAL = 2000;
+    let requestCount = 0;
+
+    const cpuChart = new MiniChart('cpuChart', '#3b82f6', 'CPU');
+    const memChart = new MiniChart('memChart', '#a855f7', 'Memory');
+
+    function setStatus(id, online, sub) {
+      const dot = document.getElementById(id);
+      dot.className = 'status-dot ' + (online ? 'online' : 'offline');
+      if (sub) {
+        const subEl = document.getElementById(id + 'Sub');
+        if (subEl) subEl.textContent = sub;
+      }
+    }
+
+    function colorForPercent(value) {
+      if (value > 90) return 'var(--accent-red)';
+      if (value > 70) return 'var(--accent-amber)';
+      if (value > 50) return 'var(--accent-blue)';
+      return 'var(--accent-green)';
+    }
+
+    async function fetchMetrics() {
+      try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        requestCount++;
+
+        // Services
+        setStatus('statusBackend', true, `Port 8080 • ${data.uptime}`);
+        setStatus('statusPostgres', true);
+        setStatus('statusRedis', data.services.redis_connected, data.services.redis_connected ? 'Connected' : 'Disconnected');
+        setStatus('statusRabbitMQ', data.services.rabbitmq_connected, data.services.rabbitmq_connected ? 'Connected' : 'Disconnected');
+
+        // CPU
+        const cpuPct = parseFloat(data.cpu.usage_percent);
+        document.getElementById('cpuValue').textContent = cpuPct.toFixed(1) + '%';
+        document.getElementById('cpuValue').style.color = colorForPercent(cpuPct);
+        document.getElementById('cpuCores').textContent = data.cpu.num_cores + ' cores';
+        cpuChart.push(cpuPct);
+
+        // Memory
+        const memPct = parseFloat(data.memory.used_percent);
+        document.getElementById('memValue').textContent = memPct.toFixed(1) + '%';
+        document.getElementById('memValue').style.color = colorForPercent(memPct);
+        document.getElementById('memDetail').textContent =
+          `${(data.memory.used_mb / 1024).toFixed(1)} / ${(data.memory.total_mb / 1024).toFixed(1)} GB`;
+        memChart.push(memPct);
+
+        // Memory bars
+        document.getElementById('memSysBar').style.width = memPct + '%';
+        document.getElementById('memSysValue').textContent = memPct.toFixed(1) + '%';
+
+        const heapAlloc = parseFloat(data.go_runtime.heap_alloc_mb);
+        const heapSys = parseFloat(data.go_runtime.heap_sys_mb);
+        const heapPct = heapSys > 0 ? (heapAlloc / heapSys * 100) : 0;
+        document.getElementById('memHeapBar').style.width = heapPct.toFixed(0) + '%';
+        document.getElementById('memHeapValue').textContent = heapAlloc.toFixed(1) + ' MB';
+        document.getElementById('memHeapSysBar').style.width = '100%';
+        document.getElementById('memHeapSysValue').textContent = heapSys.toFixed(1) + ' MB';
+
+        // Goroutines
+        document.getElementById('goroutineValue').textContent = data.go_runtime.goroutines;
+
+        // GC
+        document.getElementById('gcValue').textContent = data.go_runtime.gc_cycles;
+        document.getElementById('gcPause').textContent = 'Total pause: ' + data.go_runtime.gc_pause_total;
+
+        // Footer
+        document.getElementById('uptimeDisplay').textContent = 'Uptime: ' + data.uptime;
+        document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+        document.getElementById('requestCount').textContent = 'Polls: ' + requestCount;
+
+        // Hide error
+        document.getElementById('errorOverlay').style.display = 'none';
+
+      } catch (err) {
+        setStatus('statusBackend', false, 'Connection failed');
+        const overlay = document.getElementById('errorOverlay');
+        overlay.textContent = '⚠ Connection lost: ' + err.message;
+        overlay.style.display = 'block';
+      }
+    }
+
+    // Initial fetch + interval
+    fetchMetrics();
+    setInterval(fetchMetrics, INTERVAL);
+  </script>
+</body>
+</html>

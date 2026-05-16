@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"qris-latency-optimizer/models"
 	"qris-latency-optimizer/repository/database"
+	"qris-latency-optimizer/repository/rabbitmq" // Tambahan
 	"qris-latency-optimizer/repository/redis"
 	"qris-latency-optimizer/usecase/service"
 	"time"
@@ -109,8 +110,46 @@ func ScanQR(c *gin.Context) {
 	})
 }
 
-// ConfirmPayment - endpoint untuk confirm pembayaran
+// ConfirmPayment - VERSI OPTIMIZED (ASYNCHRONOUS DENGAN RABBITMQ)
 func ConfirmPayment(c *gin.Context) {
+	transactionID := c.Param("id")
+
+	// Validasi UUID
+	if _, err := uuid.Parse(transactionID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid transaction id",
+		})
+		return
+	}
+
+	// Siapkan payload event untuk dilempar ke message broker
+	event := map[string]string{
+		"transaction_id": transactionID,
+	}
+	eventJSON, _ := json.Marshal(event)
+
+	// Publish pesan ke RabbitMQ (super cepat)
+	err := rabbitmq.PublishMessage(string(eventJSON))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to queue transaction: " + err.Error(),
+		})
+		return
+	}
+
+	// Langsung kembalikan respons SUCCESS (Processing) tanpa menunggu DB
+	c.JSON(http.StatusOK, gin.H{
+		"data": map[string]interface{}{
+			"transaction_id": transactionID,
+			"status":         "PROCESSING",
+		},
+		"message": "payment accepted and is being processed in background",
+	})
+}
+
+// ConfirmPaymentSync - VERSI NON-OPTIMIZED (SYNCHRONOUS KE DATABASE)
+// Ini adalah kode asli Anda yang dijadikan pembanding untuk Load Test
+func ConfirmPaymentSync(c *gin.Context) {
 	transactionID := c.Param("id")
 
 	// Validasi UUID
@@ -123,7 +162,7 @@ func ConfirmPayment(c *gin.Context) {
 
 	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
 
-	// Update di database
+	// Update di database secara synchronous (lambat)
 	result := database.DB.Model(&models.Transaction{}).
 		Where("id = ?", transactionID).
 		Update("status", "SUCCESS")
@@ -162,6 +201,6 @@ func ConfirmPayment(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":    response,
-		"message": "payment confirmed successfully",
+		"message": "payment confirmed successfully (sync)",
 	})
 }

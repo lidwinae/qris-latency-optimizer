@@ -27,8 +27,27 @@ func allowedOrigins() []string {
 }
 
 func CorsHandler(r *gin.Engine) {
+	allowedList := allowedOrigins()
+
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins(),
+		AllowOriginFunc: func(origin string) bool {
+			// Always allow listed origins from env
+			for _, allowed := range allowedList {
+				if origin == allowed {
+					return true
+				}
+			}
+			// Dynamically allow any origin on frontend ports (5173, 5174)
+			// This enables LAN access from any IP (e.g. 192.168.x.x:5174)
+			if strings.HasSuffix(origin, ":5173") || strings.HasSuffix(origin, ":5174") {
+				return true
+			}
+			// Also allow the monitoring dashboard served from backend port
+			if strings.HasSuffix(origin, ":8080") {
+				return true
+			}
+			return false
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},

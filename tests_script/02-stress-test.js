@@ -14,7 +14,7 @@ export const options = {
 };
 
 export default function () {
-  const url = 'http://localhost:8080/api/qris?amount=50000';
+  const url = 'http://localhost:8080/api/qris?merchant_id=5626a17b-b3eb-46fc-aab3-50b23f71ec39&amount=50000';
   const res = http.get(url);
 
   check(res, {
