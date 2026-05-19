@@ -44,7 +44,6 @@ func main() {
 		Merchant:    handler.NewMerchantHandler(merchantUsecase),
 		QRIS:        handler.NewQRISHandler(qrisUsecase),
 		Transaction: handler.NewTransactionHandler(txUsecase),
-		Monitor:     handler.NewMonitorHandler(),
 		Ping:        handler.NewPingHandler(),
 	}
 

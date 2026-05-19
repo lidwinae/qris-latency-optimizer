@@ -12,7 +12,7 @@ QRIS Latency Optimizer Flow
 - Backend warms merchant cache in Redis with all active merchants.
 - Backend connects to RabbitMQ.
 - Backend starts background Payment Consumer worker.
-- Backend starts HTTP server and latency trackers.
+- Backend starts HTTP server.
 
 
 2. Merchant List Flow
@@ -56,7 +56,7 @@ Flow:
 
 
 4. Customer Scan Flow
----------------------
+---------------
 Endpoint:
 POST /api/transactions/scan
 
@@ -182,7 +182,6 @@ QRID:
 
 9. Main Routes
 --------------
-Payment/Transaction Endpoints:
 GET    /api/ping
 GET    /api/merchants
 GET    /api/qris?merchant_id=<merchant_uuid>&amount=<amount>
@@ -191,71 +190,8 @@ GET    /api/transactions/:id
 POST   /api/transactions/:id/confirm         (Optimized, Asynchronous)
 POST   /api/transactions/:id/confirm-sync    (Baseline, Synchronous)
 
-Monitoring & Dashboard Endpoints:
-GET    /monitor                  (Real-time metrics & load test view)
-GET    /latency                  (Live endpoint latency graphs)
-GET    /api/monitor/system       (CPU, Memory, Goroutines, Service status)
-GET    /api/monitor/live         (Latency histograms, average, p95)
-POST   /api/monitor/k6/data      (K6 load test metrics ingestion)
-POST   /api/monitor/k6/summary   (K6 test summary receiver)
-GET    /api/monitor/k6           (K6 dashboard API)
-DELETE /api/monitor/k6           (Clear K6 data)
 
-
-10. Monitoring, Grafana, InfluxDB, and K6 Flow
-----------------------------------------------
-Local monitoring has two dashboard paths:
-
-Backend live dashboard:
-- Browser opens http://localhost:8080/latency.
-- K6 dashboard scripts post selected data points to:
-  - POST /api/monitor/k6/data
-  - POST /api/monitor/k6/summary
-- Backend stores K6 samples in memory by scenario:
-  - Event_Driven_Async
-  - Synchronous_DB
-- /latency polls GET /api/monitor/k6 every 2 seconds.
-- /latency also polls GET /api/monitor/live for middleware-captured endpoint timings.
-- Data is fast and live, but not persisted after backend restart.
-
-Grafana dashboard:
-- Docker Compose starts InfluxDB on port 8086.
-- Docker Compose starts Grafana on port 3000.
-- Grafana provisioning mounts:
-  - monitoring/grafana/provisioning
-  - monitoring/grafana/dashboards
-- Grafana automatically creates datasource:
-  - QRIS K6 InfluxDB
-- Grafana automatically loads dashboard:
-  - QRIS Performance & Latency
-- K6 writes native metrics to InfluxDB when run with:
-  - k6 run --out influxdb=http://localhost:8086/k6 tests_script/06-optimized-dashboard.js
-  - k6 run --out influxdb=http://localhost:8086/k6 tests_script/07-non-optimized-dashboard.js
-- Grafana queries InfluxDB measurements:
-  - http_req_duration
-  - http_reqs
-  - http_req_failed
-  - checks
-  - vus
-- Grafana separates optimized and non-optimized results by K6 tag:
-  - my_scenario=Event_Driven_Async
-  - my_scenario=Synchronous_DB
-
-Recommended local test order:
-- Start infrastructure:
-  - docker compose up -d
-- Start backend:
-  - cd backend
-  - go run cmd/main.go
-- Run K6 comparison:
-  - tests_script/run-grafana-tests.sh
-- Open live dashboard:
-  - http://localhost:8080/latency
-- Open Grafana dashboard:
-  - http://localhost:3000
-
-
-11. RabbitMQ Purpose
+10. RabbitMQ Purpose
 --------------------
 RabbitMQ is used as a high-performance message broker for asynchronous processing.
 
@@ -263,4 +199,4 @@ Payment Confirmations Queue:
 - Takes heavy database update tasks off the main HTTP request thread.
 - Ensures immediate response to frontend (returns PROCESSING status).
 - Provides load buffering; database writes happen sequentially in the background worker without blocking web requests.
-- Results in drastically improved P95 latency and higher throughput during peak load.
+- Results in improved P95 latency and higher throughput during peak load.

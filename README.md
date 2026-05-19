@@ -6,7 +6,7 @@ Full-stack QRIS payment simulation with:
 - customer scanner app
 - Postgres for source of truth
 - Redis for cache and prefetch
-- monitoring tools for load testing
+- RabbitMQ for async payment processing
 
 ## Project Structure
 
@@ -15,6 +15,7 @@ Full-stack QRIS payment simulation with:
   - QR generation
   - transaction lifecycle
   - Redis cache and merchant prefetch
+  - RabbitMQ async payment confirmation
 - `frontend/`
   - merchant dashboard
   - React + Vite
@@ -30,9 +31,8 @@ Full-stack QRIS payment simulation with:
 - PostgreSQL
 - Redis
 - RedisInsight
+- RabbitMQ
 - pgAdmin
-- InfluxDB
-- Grafana
 
 ## Current Architecture Notes
 
@@ -55,7 +55,6 @@ Need:
 - Docker / Docker Desktop running
 - Go installed
 - Node.js installed
-- k6 installed for load testing
 
 ## 1. Start Infrastructure
 
@@ -71,8 +70,6 @@ This starts:
 - RedisInsight
 - pgAdmin
 - RabbitMQ
-- InfluxDB
-- Grafana
 
 ## 2. Backend Setup
 
@@ -127,7 +124,6 @@ Open:
 http://localhost:5050
 ```
 
-
 ### RedisInsight
 
 Open:
@@ -143,51 +139,15 @@ Host: redis
 Port: 6379
 ```
 
-### Grafana
+### RabbitMQ Management
 
 Open:
 
 ```text
-http://localhost:3000
+http://localhost:15672
 ```
 
-Ready after startup:
-- datasource: `QRIS K6 InfluxDB`
-- dashboard folder: `QRIS`
-- dashboard: `QRIS Performance & Latency`
-
-### InfluxDB
-
-Open:
-
-```text
-http://localhost:8086
-```
-
-## Load Test Monitoring
-
-Start backend first:
-
-```bash
-cd backend
-go run cmd/main.go
-```
-
-Run k6 with InfluxDB output so Grafana gets native k6 metrics:
-
-```bash
-k6 run --out influxdb=http://localhost:8086/k6 tests_script/06-optimized-dashboard.js
-k6 run --out influxdb=http://localhost:8086/k6 tests_script/07-non-optimized-dashboard.js
-```
-
-What each dashboard uses:
-- Grafana reads persisted k6 metrics from InfluxDB
-- `http://localhost:8080/latency` reads comparison/live summary from backend monitor API
-
-If Grafana shows no data:
-- confirm backend is running on `http://localhost:8080`
-- confirm k6 command includes `--out influxdb=http://localhost:8086/k6`
-- confirm test finished at least one request successfully
+Default credentials: `guest` / `guest`
 
 ## Main Backend Flow
 
@@ -203,7 +163,7 @@ Backend startup does:
 - warm merchant cache
 - connect RabbitMQ
 - start payment consumer worker
-- start HTTP server with latency middleware
+- start HTTP server
 
 ### Merchant Flow
 
@@ -276,7 +236,7 @@ Flow:
 - if miss, query Postgres
 - cache fresh transaction result
 
-### Confirm Payment
+### Confirm Payment (Optimized - Async)
 
 Endpoint:
 
@@ -291,7 +251,7 @@ Flow:
 - worker updates transaction to `SUCCESS`
 - worker deletes old transaction cache
 
-### Baseline Confirm Payment
+### Confirm Payment (Baseline - Sync)
 
 Endpoint:
 
@@ -304,38 +264,6 @@ Flow:
 - update transaction to `SUCCESS` directly in Postgres
 - delete old transaction cache
 - return updated transaction
-
-## Monitoring and Dashboards
-
-### Live backend dashboards
-
-- `http://localhost:8080/monitor`
-  - system metrics
-  - service status
-  - load test overview
-- `http://localhost:8080/latency`
-  - live endpoint latency charts
-  - optimized vs non-optimized comparison
-  - K6 summary data from backend monitor API
-
-### Monitoring APIs
-
-```text
-GET    /api/monitor/system
-GET    /api/monitor/live
-GET    /api/monitor/k6
-POST   /api/monitor/k6/data
-POST   /api/monitor/k6/summary
-DELETE /api/monitor/k6
-```
-
-### Grafana + InfluxDB
-
-- Grafana stores dashboards in `grafana_data` Docker volume.
-- InfluxDB stores persisted K6 metrics.
-- Grafana datasource is provisioned automatically as `QRIS K6 InfluxDB`.
-- Grafana dashboard is provisioned automatically as `QRIS Performance & Latency`.
-- `/latency` is live in-memory data from backend; Grafana is persisted K6 history from InfluxDB.
 
 ## Redis Usage
 
@@ -383,7 +311,7 @@ Merchant has two identifiers:
   - stored in `qr_id`
   - placed into QRIS payload tag `26.01`
 
-## Main API Routes
+## API Routes
 
 ```text
 GET  /api/ping
@@ -393,14 +321,6 @@ POST /api/transactions/scan
 GET  /api/transactions/:id
 POST /api/transactions/:id/confirm
 POST /api/transactions/:id/confirm-sync
-GET  /monitor
-GET  /latency
-GET  /api/monitor/system
-GET  /api/monitor/live
-GET  /api/monitor/k6
-POST /api/monitor/k6/data
-POST /api/monitor/k6/summary
-DELETE /api/monitor/k6
 ```
 
 ## Testing Quick Examples
@@ -411,22 +331,16 @@ DELETE /api/monitor/k6
 curl http://localhost:8080/api/transactions/<transaction_id>
 ```
 
-### Confirm payment
+### Confirm payment (async)
 
 ```bash
 curl -X POST http://localhost:8080/api/transactions/<transaction_id>/confirm
 ```
 
-### Confirm payment baseline
+### Confirm payment (sync baseline)
 
 ```bash
 curl -X POST http://localhost:8080/api/transactions/<transaction_id>/confirm-sync
-```
-
-### Run Grafana-ready K6 comparison
-
-```bash
-./tests_script/run-grafana-tests.sh
 ```
 
 ## Extra Docs
