@@ -1,6 +1,95 @@
 Changelog
 =========
 
+Branch Comparison: `testarea` vs `upstream/main`
+================================================
+
+Compared against `upstream/main` at `f53d78e`.
+
+Summary
+-------
+
+- `testarea` is 2 commits ahead of `upstream/main`.
+- Main branch work adds backend clean architecture refactor, RabbitMQ async payment confirmation, Redis cache hardening, QRIS payload validation, monitoring dashboards, and K6 load tests.
+- Current working tree additionally wires Grafana to real K6/InfluxDB metrics with provisioning and updated run commands.
+
+Backend Architecture
+--------------------
+
+1. Handler and routing refactor
+- Replaced the older combined REST setup with explicit handlers for merchants, QRIS, transactions, ping, and monitoring.
+- Added a central router setup that registers route groups and middleware.
+- Moved CORS from handler package into middleware package.
+
+2. Domain and repository layering
+- Moved models into `domain/entity`.
+- Added repository interfaces under `domain/repository`.
+- Split Postgres implementation into merchant and transaction repositories.
+- Removed older database package files in favor of explicit config and repository startup.
+
+3. Configuration and startup
+- Added centralized config loading.
+- Moved `.env_example` from backend-local path to repo root.
+- Added root-level `docker-compose.yml` and removed backend-local compose file.
+- Backend startup now connects Postgres, Redis, warms Redis cache, connects RabbitMQ, starts payment consumer, and shuts down gracefully.
+
+Payment Flow
+------------
+
+1. QRIS and transaction validation
+- QRIS payload generation now uses merchant database data and request amount.
+- Added payload parsing, CRC validation, merchant QRID extraction, and amount validation.
+- Transaction scan accepts UUID or QRID merchant identifiers and validates merchant/activity before creating transaction.
+
+2. Optimized vs non-optimized confirmation
+- Added optimized `/api/transactions/:id/confirm` route that publishes confirmation work to RabbitMQ and returns quickly with `PROCESSING`.
+- Kept baseline `/api/transactions/:id/confirm-sync` route for synchronous DB confirmation and latency comparison.
+- Added RabbitMQ publisher and payment consumer worker for async transaction status updates.
+- Transaction cache is invalidated after status updates.
+
+Caching
+-------
+
+1. Redis cache behavior
+- Redis connection is now explicit during startup instead of hidden package initialization.
+- Added merchant cache warm-up, QRID lookup, cache storage, and related merchant prefetch helpers.
+- Transaction status lookup checks Redis first, falls back to Postgres, and removes corrupted cache payloads.
+
+Monitoring and Load Testing
+---------------------------
+
+1. Backend monitoring API
+- Added `/api/monitor/system`, `/api/monitor/live`, `/api/monitor/k6`, `/api/monitor/k6/data`, and `/api/monitor/k6/summary`.
+- Added latency tracking middleware for API request duration and error capture.
+- Added in-memory K6 aggregation for live dashboard comparisons.
+
+2. Built-in monitoring pages
+- Added `/monitor` for live system/service metrics.
+- Added `/latency` for optimized vs non-optimized payment latency comparison.
+- Updated `/latency` run instructions to use K6 InfluxDB output so Grafana receives real metrics.
+
+3. K6 suite
+- Added polling, optimized confirmation, synchronous baseline, and dashboard-oriented K6 scenarios under `tests_script/`.
+- Added branch dashboard export `tests_script/dashboard-1778674676803.json`.
+- Current working tree adds `tests_script/run-grafana-tests.sh` helper for running optimized and non-optimized tests with InfluxDB output.
+
+4. Grafana and InfluxDB wiring
+- Docker Compose now starts InfluxDB and Grafana from repo root.
+- Current working tree provisions Grafana datasource `QRIS K6 InfluxDB`.
+- Current working tree provisions dashboard `QRIS Performance & Latency`.
+- Grafana now reads persisted K6 metrics from InfluxDB; `/latency` still reads live comparison data from backend monitor API.
+
+Tests and Docs
+--------------
+
+1. Tests added
+- Added QRIS payload parser/validator tests.
+- Added monitoring aggregation tests.
+
+2. Documentation updated
+- Updated flow documentation for monitoring and transaction behavior.
+- Updated README with repo-root Docker usage, Grafana details, and K6 commands using `--out influxdb=http://localhost:8086/k6`.
+
 Backend
 -------
 
@@ -120,10 +209,6 @@ Customer App / Frontend
   - `qr_payload`
   - `merchant_id`
   - `amount`
-
-2. HTTPS experiment
-- Temporary HTTPS dev-server setup for `customer-app` was added, then reverted.
-- Current customer app Vite config is back to normal HTTP dev mode.
 
 
 DevOps, Monitoring & Load Testing

@@ -8,7 +8,7 @@ export function setup() {
     // Membuat 1 transaksi di awal untuk di-polling oleh ratusan user
     const payload = JSON.stringify({
         qr_payload: "DUMMY_QR_PAYLOAD_123",
-        merchant_id: "5626a17b-b3eb-46fc-aab3-50b23f71ec39", 
+        merchant_id: "3feb140c-bdc4-4013-bca7-aa98ae448833", 
         amount: 50000
     });
     

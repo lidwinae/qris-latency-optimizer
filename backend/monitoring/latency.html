@@ -344,8 +344,8 @@ async function runTest(type){
   try{
     // We can't run k6 from browser — show instructions
     const cmd=type==='both'?
-      `cd tests_script && k6 run 06-optimized-dashboard.js && k6 run 07-non-optimized-dashboard.js`:
-      `cd tests_script && k6 run ${script}`;
+      `k6 run --out influxdb=http://localhost:8086/k6 tests_script/06-optimized-dashboard.js && k6 run --out influxdb=http://localhost:8086/k6 tests_script/07-non-optimized-dashboard.js`:
+      `k6 run --out influxdb=http://localhost:8086/k6 tests_script/${script}`;
     msg.textContent='📋 Run in terminal: '+cmd;
     // Copy to clipboard
     navigator.clipboard?.writeText(cmd);

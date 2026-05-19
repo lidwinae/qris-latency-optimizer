@@ -604,7 +604,8 @@
 
         // GC
         document.getElementById('gcValue').textContent = data.go_runtime.gc_cycles;
-        document.getElementById('gcPause').textContent = 'Total pause: ' + data.go_runtime.gc_pause_total;
+        const gcPauseMs = parseFloat(data.go_runtime.gc_pause_total_ms || 0);
+        document.getElementById('gcPause').textContent = 'Total pause: ' + gcPauseMs.toFixed(2) + 'ms';
 
         // Footer
         document.getElementById('uptimeDisplay').textContent = 'Uptime: ' + data.uptime;

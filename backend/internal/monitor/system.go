@@ -76,6 +76,9 @@ func readCPUTimes() (*cpuTimes, error) {
 			}, nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan /proc/stat: %w", err)
+	}
 
 	return nil, fmt.Errorf("/proc/stat: cpu line not found")
 }
@@ -134,6 +137,9 @@ func readMemInfo() (totalMB, usedMB, freeMB uint64, usedPercent float64, err err
 			memAvailable = val
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("scan /proc/meminfo: %w", err)
+	}
 
 	if memTotal == 0 {
 		return 0, 0, 0, 0, fmt.Errorf("could not parse MemTotal from /proc/meminfo")
@@ -152,7 +158,7 @@ func GetSystemMonitor(c *gin.Context) {
 	// CPU usage
 	cpuUsage, cpuErr := measureCPUUsage()
 	cpuInfo := gin.H{
-		"usage_percent": fmt.Sprintf("%.2f", cpuUsage),
+		"usage_percent": cpuUsage,
 		"num_cores":     runtime.NumCPU(),
 	}
 	if cpuErr != nil {
@@ -165,7 +171,7 @@ func GetSystemMonitor(c *gin.Context) {
 		"total_mb":     memTotal,
 		"used_mb":      memUsed,
 		"free_mb":      memFree,
-		"used_percent": fmt.Sprintf("%.2f", memPercent),
+		"used_percent": memPercent,
 	}
 	if memErr != nil {
 		memInfo["error"] = memErr.Error()
@@ -176,11 +182,11 @@ func GetSystemMonitor(c *gin.Context) {
 	runtime.ReadMemStats(&memStats)
 
 	goRuntime := gin.H{
-		"goroutines":     runtime.NumGoroutine(),
-		"heap_alloc_mb":  fmt.Sprintf("%.2f", float64(memStats.HeapAlloc)/1024/1024),
-		"heap_sys_mb":    fmt.Sprintf("%.2f", float64(memStats.HeapSys)/1024/1024),
-		"gc_cycles":      memStats.NumGC,
-		"gc_pause_total": fmt.Sprintf("%.2fms", float64(memStats.PauseTotalNs)/1e6),
+		"goroutines":        runtime.NumGoroutine(),
+		"heap_alloc_mb":     float64(memStats.HeapAlloc) / 1024 / 1024,
+		"heap_sys_mb":       float64(memStats.HeapSys) / 1024 / 1024,
+		"gc_cycles":         memStats.NumGC,
+		"gc_pause_total_ms": float64(memStats.PauseTotalNs) / 1e6,
 	}
 
 	// Service health

@@ -8,6 +8,9 @@ flowchart TD
     D --> E[Seed default merchants]
     E --> F[Connect Redis]
     F --> G[Warm merchant cache]
+    G --> G1[Connect RabbitMQ]
+    G1 --> G2[Start payment consumer worker]
+    G2 --> G3[Start HTTP server with latency middleware]
 
     H[Frontend Merchant Page] --> I[GET /api/merchants]
     I --> J[Query active merchants from Postgres]
@@ -39,12 +42,18 @@ flowchart TD
     AI --> AJ[Return DB transaction]
 
     AK[Customer Confirm Payment] --> AL[POST /api/transactions/:id/confirm]
-    AL --> AM[Update status to SUCCESS in Postgres]
-    AM --> AN[Delete Redis transaction cache]
-    AN --> AO[Read updated transaction from Postgres]
-    AO --> AP[Return SUCCESS transaction]
+    AL --> AM[Publish transaction_id to RabbitMQ]
+    AM --> AN[Return PROCESSING immediately]
+    AM --> AO[Payment consumer reads queue]
+    AO --> AP[Update status to SUCCESS in Postgres]
+    AP --> AQ[Delete Redis transaction cache]
 
-    AQ[Later Status Check] --> AE
+    AR[Baseline Confirm Payment] --> AS[POST /api/transactions/:id/confirm-sync]
+    AS --> AT[Update status to SUCCESS in Postgres synchronously]
+    AT --> AU[Delete Redis transaction cache]
+    AU --> AV[Return SUCCESS transaction]
+
+    AW[Later Status Check] --> AE
 ```
 
 ## Notes
@@ -53,3 +62,33 @@ flowchart TD
 - Redis is cache layer for merchants and transactions.
 - QRID like `TEST001` is QR payload merchant identifier.
 - Merchant UUID is database primary key.
+- Optimized confirm returns `PROCESSING` and finishes through RabbitMQ worker.
+- Baseline confirm-sync writes to Postgres before responding.
+
+## Monitoring Flow
+
+```mermaid
+flowchart LR
+    A[K6 optimized script] -->|POST /api/monitor/k6/data + summary| B[Backend in-memory K6 store]
+    C[K6 non-optimized script] -->|POST /api/monitor/k6/data + summary| B
+    B -->|GET /api/monitor/k6| D["/latency live dashboard"]
+
+    E[Backend latency middleware] -->|GET /api/monitor/live| D
+
+    A -->|--out influxdb=http://localhost:8086/k6| F[(InfluxDB k6 database)]
+    C -->|--out influxdb=http://localhost:8086/k6| F
+    F -->|InfluxQL queries| G[Grafana QRIS Performance & Latency dashboard]
+
+    H[Docker Compose] --> I[Provision Grafana datasource]
+    H --> J[Provision Grafana dashboard]
+    I --> G
+    J --> G
+```
+
+## Monitoring Notes
+
+- `/latency` is live/in-memory and resets when backend restarts.
+- Grafana is persisted through InfluxDB and `grafana_data` volume.
+- Grafana datasource name is `QRIS K6 InfluxDB`.
+- Grafana dashboard title is `QRIS Performance & Latency`.
+- K6 scenario tags are `Event_Driven_Async` and `Synchronous_DB`.

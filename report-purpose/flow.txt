@@ -36,7 +36,7 @@ Flow:
 - Frontend sends merchant UUID and amount.
 - Backend validates amount.
 - Backend checks merchant_id exists and merchant is active.
-- Backend builds QRIS payload in usecase/service/payload.go.
+- Backend builds QRIS payload in backend/internal/qris/payload.go.
 - QRIS payload includes:
   - tag 00: payload format indicator
   - tag 01: dynamic QR indicator
@@ -202,7 +202,60 @@ GET    /api/monitor/k6           (K6 dashboard API)
 DELETE /api/monitor/k6           (Clear K6 data)
 
 
-10. RabbitMQ Purpose
+10. Monitoring, Grafana, InfluxDB, and K6 Flow
+----------------------------------------------
+Local monitoring has two dashboard paths:
+
+Backend live dashboard:
+- Browser opens http://localhost:8080/latency.
+- K6 dashboard scripts post selected data points to:
+  - POST /api/monitor/k6/data
+  - POST /api/monitor/k6/summary
+- Backend stores K6 samples in memory by scenario:
+  - Event_Driven_Async
+  - Synchronous_DB
+- /latency polls GET /api/monitor/k6 every 2 seconds.
+- /latency also polls GET /api/monitor/live for middleware-captured endpoint timings.
+- Data is fast and live, but not persisted after backend restart.
+
+Grafana dashboard:
+- Docker Compose starts InfluxDB on port 8086.
+- Docker Compose starts Grafana on port 3000.
+- Grafana provisioning mounts:
+  - monitoring/grafana/provisioning
+  - monitoring/grafana/dashboards
+- Grafana automatically creates datasource:
+  - QRIS K6 InfluxDB
+- Grafana automatically loads dashboard:
+  - QRIS Performance & Latency
+- K6 writes native metrics to InfluxDB when run with:
+  - k6 run --out influxdb=http://localhost:8086/k6 tests_script/06-optimized-dashboard.js
+  - k6 run --out influxdb=http://localhost:8086/k6 tests_script/07-non-optimized-dashboard.js
+- Grafana queries InfluxDB measurements:
+  - http_req_duration
+  - http_reqs
+  - http_req_failed
+  - checks
+  - vus
+- Grafana separates optimized and non-optimized results by K6 tag:
+  - my_scenario=Event_Driven_Async
+  - my_scenario=Synchronous_DB
+
+Recommended local test order:
+- Start infrastructure:
+  - docker compose up -d
+- Start backend:
+  - cd backend
+  - go run cmd/main.go
+- Run K6 comparison:
+  - tests_script/run-grafana-tests.sh
+- Open live dashboard:
+  - http://localhost:8080/latency
+- Open Grafana dashboard:
+  - http://localhost:3000
+
+
+11. RabbitMQ Purpose
 --------------------
 RabbitMQ is used as a high-performance message broker for asynchronous processing.
 

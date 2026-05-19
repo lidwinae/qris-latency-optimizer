@@ -4,7 +4,7 @@ import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 const scenarioName = __ENV.SCENARIO || 'Synchronous_DB';
 const DASHBOARD_URL = 'http://localhost:8080/api/monitor/k6';
-const MERCHANT_ID = '5626a17b-b3eb-46fc-aab3-50b23f71ec39';
+const MERCHANT_ID = '101552c9-a6a0-4120-9403-276179c7f7bd';
 const jsonHeaders = { headers: { 'Content-Type': 'application/json' } };
 
 export const options = {

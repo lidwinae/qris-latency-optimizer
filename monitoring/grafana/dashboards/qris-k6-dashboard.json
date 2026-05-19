@@ -1,0 +1,256 @@
+{
+  "id": null,
+  "uid": "qris-k6-latency",
+  "title": "QRIS Performance & Latency",
+  "tags": ["qris", "k6", "influxdb"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 0,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "P95 Latency by Scenario",
+      "type": "timeseries",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "$tag_my_scenario",
+          "query": "SELECT percentile(\"value\", 95) FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time($__interval), \"my_scenario\" fill(null)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Avg Latency by Scenario",
+      "type": "timeseries",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "$tag_my_scenario",
+          "query": "SELECT mean(\"value\") FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time($__interval), \"my_scenario\" fill(null)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Requests per Second",
+      "type": "timeseries",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "$tag_my_scenario",
+          "query": "SELECT non_negative_derivative(count(\"value\"), 1s) FROM \"http_reqs\" WHERE $timeFilter GROUP BY time(1s), \"my_scenario\" fill(0)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Rate by Scenario",
+      "type": "bargauge",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "$tag_my_scenario",
+          "query": "SELECT mean(\"value\") FROM \"http_req_failed\" WHERE $timeFilter GROUP BY \"my_scenario\""
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Checks Pass Rate",
+      "type": "bargauge",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "$tag_check",
+          "query": "SELECT mean(\"value\") FROM \"checks\" WHERE $timeFilter GROUP BY \"check\""
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Virtual Users",
+      "type": "timeseries",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "query": "SELECT max(\"value\") FROM \"vus\" WHERE $timeFilter GROUP BY time($__interval) fill(null)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Total Requests",
+      "type": "stat",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "query": "SELECT count(\"value\") FROM \"http_reqs\" WHERE $timeFilter"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Scenario P95 Snapshot",
+      "type": "table",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "qris-k6-influx"
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "resultFormat": "table",
+          "query": "SELECT percentile(\"value\", 95) AS \"p95_ms\" FROM \"http_req_duration\" WHERE $timeFilter GROUP BY \"my_scenario\""
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  }
+}

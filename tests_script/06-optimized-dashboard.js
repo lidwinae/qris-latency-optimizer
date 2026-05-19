@@ -4,7 +4,7 @@ import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 const scenarioName = __ENV.SCENARIO || 'Event_Driven_Async';
 const DASHBOARD_URL = 'http://localhost:8080/api/monitor/k6';
-const MERCHANT_ID = '5626a17b-b3eb-46fc-aab3-50b23f71ec39';
+const MERCHANT_ID = 'dfb0bc80-7d5f-42dd-8757-d1407d62b363';
 const jsonHeaders = { headers: { 'Content-Type': 'application/json' } };
 
 export const options = {

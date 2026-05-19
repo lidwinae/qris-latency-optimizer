@@ -20,7 +20,7 @@ export default function () {
     // 1. INQUIRY (Simulasi Scan QR)
     const payload = JSON.stringify({
         qr_payload: "DUMMY_QR_PAYLOAD_123",
-        merchant_id: "5626a17b-b3eb-46fc-aab3-50b23f71ec39", // UUID Kantin FILKOM UB
+        merchant_id: "3feb140c-bdc4-4013-bca7-aa98ae448833", // UUID Kantin FILKOM UB
         amount: 15000
     });
     
