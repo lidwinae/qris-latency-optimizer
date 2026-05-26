@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"qris-latency-optimizer/models"
 	"qris-latency-optimizer/repository/database"
+	"qris-latency-optimizer/repository/rabbitmq"
 	"qris-latency-optimizer/repository/redis"
 	"qris-latency-optimizer/usecase/service"
 	"time"
@@ -72,7 +73,7 @@ func ScanQR(c *gin.Context) {
 	transactionID := uuid.New()
 	cacheKey := fmt.Sprintf("transaction:%s", transactionID.String())
 
-	// Buat transaction model
+	// Create transaction model
 	transaction := models.Transaction{
 		ID:         transactionID,
 		MerchantID: merchantID,
@@ -81,7 +82,7 @@ func ScanQR(c *gin.Context) {
 		CreatedAt:  time.Now(),
 	}
 
-	// Simpan ke database
+	// Save to database (source of truth)
 	if err := database.DB.Create(&transaction).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create transaction: " + err.Error(),
@@ -89,10 +90,13 @@ func ScanQR(c *gin.Context) {
 		return
 	}
 
-	// Simpan ke Redis dengan TTL transaksi
+	// Save to Redis with TTL
 	if transactionJSON, err := json.Marshal(transaction); err == nil {
 		_ = redis.Set(cacheKey, string(transactionJSON), redis.TTLTransaction)
 	}
+
+	// ✨ REMOVED: Do NOT notify on PENDING
+	// Notifikasi hanya dikirim ketika payment CONFIRMED (di ConfirmPayment)
 
 	response := models.TransactionResponse{
 		TransactionID: transactionID.String(),
@@ -116,44 +120,54 @@ func ConfirmPayment(c *gin.Context) {
 	// Validasi UUID
 	if _, err := uuid.Parse(transactionID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid transaction id",
+			"error": "invalid transaction id format",
 		})
 		return
 	}
 
-	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
-
-	// Update di database
-	result := database.DB.Model(&models.Transaction{}).
-		Where("id = ?", transactionID).
-		Update("status", "SUCCESS")
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to confirm payment: " + result.Error.Error(),
-		})
-		return
-	}
-	if result.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "transaction not found",
-		})
-		return
-	}
-
-	// Hapus dari cache (invalidate)
-	redis.Delete(cacheKey)
-
-	// Ambil data transaksi yang sudah updated
+	// Fetch transaction untuk dapetin merchant info
 	var transaction models.Transaction
-	if err := database.DB.First(&transaction, "id = ?", transactionID).Error; err != nil {
+	if err := database.DB.Preload("Merchant").First(&transaction, "id = ?", transactionID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "transaction not found",
 		})
 		return
 	}
+
+	// Update status ke SUCCESS
+	if err := database.DB.Model(&transaction).
+		Update("status", "SUCCESS").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to confirm payment: " + err.Error(),
+		})
+		return
+	}
+	transaction.Status = "SUCCESS"
+
+	// Hapus dari cache lama
+	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
+	_ = redis.Delete(cacheKey)
+
+	// Update cache dengan status baru
+	if transactionJSON, err := json.Marshal(transaction); err == nil {
+		_ = redis.Set(cacheKey, string(transactionJSON), redis.TTLTransaction)
+	}
+
+	// ✨ NEW: Notify merchant HANYA ketika payment SUCCESS
+	go func() {
+		err := rabbitmq.PublishNotification(
+			transaction.ID.String(),
+			transaction.MerchantID.String(),
+			transaction.Merchant.MerchantName,
+			transaction.Amount,
+		)
+		if err != nil {
+			fmt.Printf("⚠ Failed to publish success notification: %v\n", err)
+		}
+	}()
 
 	response := models.TransactionResponse{
-		TransactionID: transactionID,
+		TransactionID: transaction.ID.String(),
 		MerchantID:    transaction.MerchantID.String(),
 		Amount:        transaction.Amount,
 		Status:        transaction.Status,

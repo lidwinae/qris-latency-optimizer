@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # # Redis untuk Caching Layer (Kunci optimasi latency p95)
+  # Redis untuk Caching Layer (Kunci optimasi latency p95)
   redis:
     image: redis:7-alpine
     container_name: qris_redis
@@ -29,16 +29,16 @@ services:
     volumes:
       - redisinsight_data:/data
 
-  # # RabbitMQ untuk Message Broker (Proses Asynchronous)
-  # rabbitmq:
-  #   image: rabbitmq:3-management-alpine
-  #   container_name: qris_rabbitmq
-  #   ports:
-  #     - "5672:5672"   # Port data
-  #     - "15672:15672" # Port Dashboard (bisa dibuka di browser)
-  #   environment:
-  #     RABBITMQ_DEFAULT_USER: guest
-  #     RABBITMQ_DEFAULT_PASS: guest
+  # RabbitMQ untuk Message Broker (Proses Asynchronous)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: qris_rabbitmq
+    ports:
+      - "5672:5672" # Port data
+      - "15672:15672" # Port Dashboard (bisa dibuka di browser)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
 
   pgadmin:
     image: dpage/pgadmin4
@@ -52,7 +52,7 @@ services:
     depends_on:
       - db
 
-  # --- MONITORING STACK (ADDITION) ---
+  # --- MONITORING STACK ---
 
   # InfluxDB untuk menyimpan metrik hasil Load Test k6
   influxdb:
