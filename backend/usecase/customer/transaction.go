@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"qris-latency-optimizer/database"
 	"qris-latency-optimizer/models"
-	"qris-latency-optimizer/repository/database"
-	"qris-latency-optimizer/repository/rabbitmq" // Tambahan
-	"qris-latency-optimizer/repository/redis"
+	"qris-latency-optimizer/redis"
+	"qris-latency-optimizer/repository/rabbitmq" // TAMBAHKAN
 	"qris-latency-optimizer/usecase/service"
 	"time"
-
+	
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -82,7 +82,7 @@ func ScanQR(c *gin.Context) {
 		CreatedAt:  time.Now(),
 	}
 
-	// Simpan ke database
+	// Simpan ke database (source of truth)
 	if err := database.DB.Create(&transaction).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create transaction: " + err.Error(),
@@ -94,6 +94,19 @@ func ScanQR(c *gin.Context) {
 	if transactionJSON, err := json.Marshal(transaction); err == nil {
 		_ = redis.Set(cacheKey, string(transactionJSON), redis.TTLTransaction)
 	}
+
+	// ✨ ASYNC publish ke RabbitMQ (non-blocking)
+	go func() {
+		err := rabbitmq.PublishNotification(
+			transactionID.String(),
+			merchantID.String(),
+			merchant.MerchantName,
+			req.Amount,
+		)
+		if err != nil {
+			fmt.Printf("⚠ Failed to publish notification: %v\n", err)
+		}
+	}()
 
 	response := models.TransactionResponse{
 		TransactionID: transactionID.String(),
@@ -110,89 +123,38 @@ func ScanQR(c *gin.Context) {
 	})
 }
 
-// ConfirmPayment - VERSI OPTIMIZED (ASYNCHRONOUS DENGAN RABBITMQ)
+// ConfirmPayment - endpoint untuk confirm pembayaran
 func ConfirmPayment(c *gin.Context) {
 	transactionID := c.Param("id")
 
 	// Validasi UUID
 	if _, err := uuid.Parse(transactionID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid transaction id",
+			"error": "invalid transaction id format",
 		})
 		return
 	}
 
-	// Siapkan payload event untuk dilempar ke message broker
-	event := map[string]string{
-		"transaction_id": transactionID,
-	}
-	eventJSON, _ := json.Marshal(event)
-
-	// Publish pesan ke RabbitMQ (super cepat)
-	err := rabbitmq.PublishMessage(string(eventJSON))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to queue transaction: " + err.Error(),
-		})
-		return
-	}
-
-	// Langsung kembalikan respons SUCCESS (Processing) tanpa menunggu DB
-	c.JSON(http.StatusOK, gin.H{
-		"data": map[string]interface{}{
-			"transaction_id": transactionID,
-			"status":         "PROCESSING",
-		},
-		"message": "payment accepted and is being processed in background",
-	})
-}
-
-// ConfirmPaymentSync - VERSI NON-OPTIMIZED (SYNCHRONOUS KE DATABASE)
-// Ini adalah kode asli Anda yang dijadikan pembanding untuk Load Test
-func ConfirmPaymentSync(c *gin.Context) {
-	transactionID := c.Param("id")
-
-	// Validasi UUID
-	if _, err := uuid.Parse(transactionID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid transaction id",
-		})
-		return
-	}
-
-	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
-
-	// Update di database secara synchronous (lambat)
-	result := database.DB.Model(&models.Transaction{}).
+	// Update di database
+	if err := database.DB.Model(&models.Transaction{}).
 		Where("id = ?", transactionID).
-		Update("status", "SUCCESS")
-	if result.Error != nil {
+		Update("status", "SUCCESS").Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to confirm payment: " + result.Error.Error(),
-		})
-		return
-	}
-	if result.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "transaction not found",
+			"error": "failed to confirm payment: " + err.Error(),
 		})
 		return
 	}
 
-	// Hapus dari cache (invalidate)
-	redis.Delete(cacheKey)
+	// Hapus dari cache
+	cacheKey := fmt.Sprintf("transaction:%s", transactionID)
+	_ = redis.Delete(cacheKey)
 
-	// Ambil data transaksi yang sudah updated
+	// Fetch updated transaction
 	var transaction models.Transaction
-	if err := database.DB.First(&transaction, "id = ?", transactionID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "transaction not found",
-		})
-		return
-	}
+	database.DB.First(&transaction, "id = ?", transactionID)
 
 	response := models.TransactionResponse{
-		TransactionID: transactionID,
+		TransactionID: transaction.ID.String(),
 		MerchantID:    transaction.MerchantID.String(),
 		Amount:        transaction.Amount,
 		Status:        transaction.Status,
@@ -201,6 +163,6 @@ func ConfirmPaymentSync(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":    response,
-		"message": "payment confirmed successfully (sync)",
+		"message": "payment confirmed successfully",
 	})
 }

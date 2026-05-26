@@ -2,63 +2,64 @@ package worker
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
-	"time"
 
-	"qris-latency-optimizer/models"
-	"qris-latency-optimizer/repository/database"
 	"qris-latency-optimizer/repository/rabbitmq"
-	"qris-latency-optimizer/repository/redis"
 )
 
-// StartPaymentConsumer runs a background goroutine to process async payment confirmations
+type NotificationPayload struct {
+	TransactionID string    `json:"transaction_id"`
+	MerchantID    string    `json:"merchant_id"`
+	MerchantName  string    `json:"merchant_name"`
+	Amount        float64   `json:"amount"`
+	Status        string    `json:"status"`
+	Timestamp     string    `json:"timestamp"`
+}
+
+// StartPaymentConsumer - start consuming messages dari RabbitMQ
 func StartPaymentConsumer() {
-	msgs, err := rabbitmq.Channel.Consume(
-		rabbitmq.Queue.Name, // queue
-		"",                  // consumer
-		true,                // auto-ack
-		false,               // exclusive
-		false,               // no-local
-		false,               // no-wait
-		nil,                 // args
-	)
-	if err != nil {
-		log.Fatalf("Failed to register RabbitMQ consumer: %v", err)
-	}
-
 	go func() {
-		for d := range msgs {
-			processStart := time.Now()
+		// ✨ DIUBAH: Get notification queue dari package
+		channel := rabbitmq.Channel
+		if channel == nil {
+			log.Println("⚠ RabbitMQ channel not available, consumer not started")
+			return
+		}
 
-			var event map[string]string
-			if err := json.Unmarshal(d.Body, &event); err != nil {
-				log.Printf("[Worker] Error unmarshalling message: %v | Body: %s", err, string(d.Body))
+		// ✨ DIUBAH: Use NotificationQueue yang sudah dideklarasi
+		q := rabbitmq.GetNotificationQueue()
+
+		msgs, err := channel.Consume(
+			q.Name,       // queue name
+			"consumer",   // consumer tag
+			false,        // auto-ack (manual ack)
+			false,        // exclusive
+			false,        // no-local
+			false,        // no-wait
+			nil,          // args
+		)
+		if err != nil {
+			log.Fatalf("❌ Failed to consume: %v", err)
+		}
+
+		log.Println("✓ Consumer worker started, listening for notifications...")
+
+		for msg := range msgs {
+			var payload NotificationPayload
+			err := json.Unmarshal(msg.Body, &payload)
+			if err != nil {
+				log.Printf("❌ Failed to unmarshal: %v", err)
+				msg.Nack(false, false)
 				continue
 			}
 
-			transactionID := event["transaction_id"]
-			if transactionID == "" {
-				log.Printf("[Worker] Skipping message with empty transaction_id")
-				continue
-			}
+			log.Printf("📨 Processing notification [TX: %s, Merchant: %s]", 
+				payload.TransactionID, payload.MerchantName)
 
-			// 1. Update status to SUCCESS in PostgreSQL
-			if err := database.DB.Model(&models.Transaction{}).
-				Where("id = ?", transactionID).
-				Update("status", "SUCCESS").Error; err != nil {
-				log.Printf("[Worker] Failed to update transaction %s: %v", transactionID, err)
-				continue
-			}
+			// TODO: Push ke WebSocket hub di sini
+			// consumer.Hub.SendToMerchant(payload.MerchantID, notification)
 
-			// 2. Invalidate Redis cache so the next poll fetches fresh SUCCESS status
-			cacheKey := fmt.Sprintf("transaction:%s", transactionID)
-			redis.Delete(cacheKey)
-
-			elapsed := time.Since(processStart)
-			log.Printf("[Worker] ✓ Confirmed payment %s in %v", transactionID, elapsed)
+			msg.Ack(false) // acknowledge success
 		}
 	}()
-
-	fmt.Println("✓ RabbitMQ Worker is running and waiting for messages...")
 }

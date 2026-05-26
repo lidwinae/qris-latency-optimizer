@@ -16,6 +16,7 @@ import (
 	"qris-latency-optimizer/repository/redis"
 	"qris-latency-optimizer/usecase/service"
 	"qris-latency-optimizer/worker"
+	"qris-latency-optimizer/internal/websocket" // TAMBAHKAN
 
 	"github.com/gin-gonic/gin"
 )
@@ -39,14 +40,19 @@ func main() {
 	rabbitmq.ConnectRabbitMQ()
 	defer rabbitmq.Close()
 
-	// 5. Start the RabbitMQ consumer worker (processes async payment confirmations)
+	// 5. Initialize WebSocket Hub
+	wsHub := websocket.NewHub()
+	go wsHub.Run() // Run hub dalam goroutine
+	fmt.Println("✓ WebSocket Hub initialized")
+
+	// 6. Start the RabbitMQ consumer worker (processes async notifications)
 	worker.StartPaymentConsumer()
 
 	// --- HTTP Server ---
 	r := gin.Default()
 	handler.CorsHandler(r)
 	r.Use(service.LatencyTracker()) // Track latency for all API requests
-	handler.Rest(r)
+	handler.Rest(r, wsHub) // DIUBAH: pass wsHub ke handler
 
 	srv := &http.Server{
 		Addr:    ":8080",

@@ -3,11 +3,13 @@ package handler
 import (
 	"qris-latency-optimizer/usecase/customer"
 	"qris-latency-optimizer/usecase/service"
+	"qris-latency-optimizer/internal/websocket" // TAMBAHKAN
 
 	"github.com/gin-gonic/gin"
 )
 
-func Rest(r *gin.Engine) {
+// DIUBAH: add wsHub parameter
+func Rest(r *gin.Engine, wsHub *websocket.Hub) {
 	// Create QR code endpoint
 	r.GET("/api/qris", service.GenerateDynamic)
 
@@ -17,29 +19,13 @@ func Rest(r *gin.Engine) {
 
 	// Customer endpoints
 	r.POST("/api/transactions/scan", customer.ScanQR)
-
-	// ENDPOINT 1: OPTIMIZED (RabbitMQ / Cepat) -> Kotak Hijau Grafana
 	r.POST("/api/transactions/:id/confirm", customer.ConfirmPayment)
-
-	// ENDPOINT 2: NON-OPTIMIZED (Sync DB / Lambat) -> Kotak Merah Grafana
-	r.POST("/api/transactions/:id/confirm-sync", customer.ConfirmPaymentSync)
 
 	// check health endpoint
 	r.GET("/api/ping", service.Ping)
 
-	// System monitoring endpoint (CPU, memory, services)
-	r.GET("/api/monitor/system", service.GetSystemMonitor)
-
-	// K6 load test monitoring endpoints
-	r.POST("/api/monitor/k6/data", service.PostK6Data)
-	r.POST("/api/monitor/k6/summary", service.PostK6Summary)
-	r.GET("/api/monitor/k6", service.GetK6Dashboard)
-	r.DELETE("/api/monitor/k6", service.ClearK6Data)
-
-	// Live latency tracking endpoint
-	r.GET("/api/monitor/live", service.GetLiveLatency)
-
-	// Serve real-time monitoring dashboards
-	r.StaticFile("/monitor", "./monitoring/index.html")
-	r.StaticFile("/latency", "./monitoring/latency.html")
+	// WebSocket endpoint
+	r.GET("/ws", func(c *gin.Context) {
+		wsHub.HandleWebSocket(c)
+	})
 }
