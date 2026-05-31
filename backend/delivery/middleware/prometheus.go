@@ -12,7 +12,11 @@ import (
 )
 
 var (
-	httpRequestsTotal = promauto.NewCounterVec(
+	Registry = prometheus.NewRegistry()
+
+	appMetrics = promauto.With(Registry)
+
+	httpRequestsTotal = appMetrics.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Total number of HTTP requests",
@@ -20,7 +24,7 @@ var (
 		[]string{"method", "path", "status", "network_mode"},
 	)
 
-	httpRequestDuration = promauto.NewHistogramVec(
+	httpRequestDuration = appMetrics.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "http_request_duration_seconds",
 			Help:    "Duration of HTTP requests in seconds",
@@ -29,7 +33,7 @@ var (
 		[]string{"method", "path", "network_mode"},
 	)
 
-	clientRequestDuration = promauto.NewHistogramVec(
+	clientRequestDuration = appMetrics.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "client_request_duration_seconds",
 			Help:    "Duration of HTTP requests from the client's perspective",
@@ -38,14 +42,14 @@ var (
 		[]string{"method", "path", "network_mode"},
 	)
 
-	transactionsCreatedTotal = promauto.NewCounter(
+	transactionsCreatedTotal = appMetrics.NewCounter(
 		prometheus.CounterOpts{
 			Name: "transactions_created_total",
 			Help: "Total number of created transactions",
 		},
 	)
 
-	paymentConfirmationsTotal = promauto.NewCounterVec(
+	paymentConfirmationsTotal = appMetrics.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "payment_confirmations_total",
 			Help: "Total number of payment confirmation requests",
@@ -53,7 +57,7 @@ var (
 		[]string{"mode", "result"},
 	)
 
-	paymentConfirmationDuration = promauto.NewHistogramVec(
+	paymentConfirmationDuration = appMetrics.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "payment_confirmation_duration_seconds",
 			Help:    "Duration of payment confirmation requests in seconds",
@@ -62,7 +66,7 @@ var (
 		[]string{"mode"},
 	)
 
-	paymentWorkerProcessedTotal = promauto.NewCounterVec(
+	paymentWorkerProcessedTotal = appMetrics.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "payment_worker_processed_total",
 			Help: "Total number of payment confirmation messages processed by the worker",
@@ -70,7 +74,7 @@ var (
 		[]string{"result"},
 	)
 
-	paymentWorkerDuration = promauto.NewHistogram(
+	paymentWorkerDuration = appMetrics.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "payment_worker_duration_seconds",
 			Help:    "Duration of payment worker processing in seconds",
@@ -78,7 +82,7 @@ var (
 		},
 	)
 
-	cacheLookupTotal = promauto.NewCounterVec(
+	cacheLookupTotal = appMetrics.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "cache_lookup_total",
 			Help: "Total number of cache lookups",
@@ -86,7 +90,7 @@ var (
 		[]string{"type", "result"},
 	)
 
-	cacheWriteTotal = promauto.NewCounterVec(
+	cacheWriteTotal = appMetrics.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "cache_write_total",
 			Help: "Total number of cache writes",
@@ -146,6 +150,11 @@ func RecordCacheWrite(cacheType, result string) {
 
 func PrometheusMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.FullPath() == "/metrics" || c.Request.URL.Path == "/metrics" {
+			c.Next()
+			return
+		}
+
 		start := time.Now()
 
 		// Process request

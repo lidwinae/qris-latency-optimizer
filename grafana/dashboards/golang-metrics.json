@@ -190,7 +190,7 @@
       "title": "Slowest Endpoints by P95 Server Latency",
       "targets": [
         {
-          "expr": "sort_desc(histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, method, path, network_mode)) * 1000)",
+          "expr": "sort_desc((histogram_quantile(0.95, sum(increase(http_request_duration_seconds_bucket[$__range])) by (le, method, path, network_mode)) * 1000) and on(method, path, network_mode) (sum(increase(http_request_duration_seconds_count[$__range])) by (method, path, network_mode) > 0))",
           "refId": "A",
           "format": "table",
           "instant": true
@@ -301,7 +301,7 @@
     },
     {
       "type": "row",
-      "title": "Cache and Backend Health",
+      "title": "Cache",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }
     },
     {
@@ -357,42 +357,6 @@
         }
       },
       "gridPos": { "h": 7, "w": 8, "x": 16, "y": 46 }
-    },
-    {
-      "type": "timeseries",
-      "title": "Go Goroutines",
-      "targets": [
-        {
-          "expr": "go_goroutines",
-          "refId": "A",
-          "legendFormat": "goroutines"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0
-        }
-      },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 53 }
-    },
-    {
-      "type": "timeseries",
-      "title": "Go Heap Memory",
-      "targets": [
-        {
-          "expr": "go_memstats_heap_alloc_bytes",
-          "refId": "A",
-          "legendFormat": "heap allocated"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "decimals": 0
-        }
-      },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 53 }
     }
   ]
 }

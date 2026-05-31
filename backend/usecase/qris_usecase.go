@@ -4,8 +4,6 @@ import (
 	"errors"
 	"qris-latency-optimizer/domain/entity"
 	"qris-latency-optimizer/domain/repository"
-	"qris-latency-optimizer/internal/qris"
-	"qris-latency-optimizer/repository/redis"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -16,11 +14,24 @@ type QRISUsecase interface {
 }
 
 type qrisUsecase struct {
-	repo repository.MerchantRepository
+	repo             repository.MerchantRepository
+	merchantCache    MerchantCache
+	merchantPrefetch MerchantPrefetcher
+	qrisCodec        QRISCodec
 }
 
-func NewQRISUsecase(repo repository.MerchantRepository) QRISUsecase {
-	return &qrisUsecase{repo: repo}
+func NewQRISUsecase(
+	repo repository.MerchantRepository,
+	merchantCache MerchantCache,
+	merchantPrefetch MerchantPrefetcher,
+	qrisCodec QRISCodec,
+) QRISUsecase {
+	return &qrisUsecase{
+		repo:             repo,
+		merchantCache:    merchantCache,
+		merchantPrefetch: merchantPrefetch,
+		qrisCodec:        qrisCodec,
+	}
 }
 
 func (u *qrisUsecase) GenerateQRIS(merchantIDStr string, amountStr string) (string, *entity.Merchant, int, error) {
@@ -44,10 +55,10 @@ func (u *qrisUsecase) GenerateQRIS(merchantIDStr string, amountStr string) (stri
 	}
 
 	// Cache operations
-	redis.CacheMerchant(*merchant)
-	go redis.PrefetchRelatedMerchants(merchant.QRID)
+	u.merchantCache.CacheMerchant(*merchant)
+	go u.merchantPrefetch.PrefetchRelatedMerchants(merchant.QRID)
 
-	payload, err := qris.GeneratePayload(amount, merchant.MerchantName, merchant.QRID)
+	payload, err := u.qrisCodec.GeneratePayload(amount, merchant.MerchantName, merchant.QRID)
 	if err != nil {
 		return "", nil, 0, err
 	}

@@ -12,6 +12,7 @@ import (
 
 	"qris-latency-optimizer/config"
 	"qris-latency-optimizer/delivery/handler"
+	"qris-latency-optimizer/internal/qris"
 	"qris-latency-optimizer/internal/websocket"
 	"qris-latency-optimizer/repository/postgres"
 	"qris-latency-optimizer/repository/rabbitmq"
@@ -20,31 +21,42 @@ import (
 	"qris-latency-optimizer/worker"
 )
 
-func setupInfrastructure() {
+func setupInfrastructure() *rabbitmq.Broker {
 	config.Load()
 
 	postgres.ConnectDB()
-	fmt.Println("✓ PostgreSQL connected & migrated")
+	fmt.Println("PostgreSQL connected & migrated")
 
 	redis.ConnectRedis()
 	redis.WarmUpCache()
-	fmt.Println("✓ Redis connected & cache warmed")
+	fmt.Println("Redis connected & cache warmed")
 
-	rabbitmq.ConnectRabbitMQ()
+	return rabbitmq.ConnectRabbitMQ()
 }
 
 func main() {
-	fmt.Println("=== QRIS Latency Optimizer Starting ===")
 
-	setupInfrastructure()
+	broker := setupInfrastructure()
 	websocket.InitWSConfig()
 
 	merchantRepo := postgres.NewMerchantRepository(postgres.DB)
 	txRepo := postgres.NewTransactionRepository(postgres.DB)
+	merchantCache := redis.NewMerchantCache()
+	txCache := redis.NewTransactionCache()
+	merchantPrefetcher := redis.NewMerchantPrefetcher()
+	qrisCodec := qris.NewCodec()
 
 	merchantUsecase := usecase.NewMerchantUsecase(merchantRepo)
-	qrisUsecase := usecase.NewQRISUsecase(merchantRepo)
-	txUsecase := usecase.NewTransactionUsecase(txRepo, merchantRepo)
+	qrisUsecase := usecase.NewQRISUsecase(merchantRepo, merchantCache, merchantPrefetcher, qrisCodec)
+	txUsecase := usecase.NewTransactionUsecase(
+		txRepo,
+		merchantRepo,
+		txCache,
+		merchantCache,
+		broker,
+		broker,
+		qrisCodec,
+	)
 
 	handlers := &handler.Handlers{
 		Merchant:    handler.NewMerchantHandler(merchantUsecase),
@@ -56,12 +68,11 @@ func main() {
 
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
-	fmt.Println("✓ WebSocket Hub initialized")
+	fmt.Println("WebSocket Hub initialized")
 
-	worker.SetWSHub(wsHub)
-	worker.StartPaymentConsumer(txUsecase)
-	worker.StartNotificationConsumer()
-	fmt.Println("✓ RabbitMQ workers started")
+	worker.StartPaymentConsumer(broker, txUsecase)
+	worker.StartNotificationConsumer(broker, wsHub)
+	fmt.Println("RabbitMQ workers started")
 
 	r := handler.SetupRouter(handlers, wsHub)
 
@@ -88,6 +99,6 @@ func main() {
 		log.Printf("Server forced to shutdown: %v", err)
 	}
 
-	rabbitmq.Close()
+	broker.Close()
 	fmt.Println("Shutdown complete")
 }

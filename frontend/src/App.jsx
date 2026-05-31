@@ -16,6 +16,7 @@ export default function App() {
   const [selectedMerchantInfo, setSelectedMerchantInfo] = useState(null);
   const [payload, setPayload] = useState("");
   const [loading, setLoading] = useState(true);
+  const [qrError, setQrError] = useState("");
   const [inputAmount, setInputAmount] = useState(1000);
   const [submittedAmount, setSubmittedAmount] = useState(1000);
 
@@ -63,20 +64,33 @@ export default function App() {
   useEffect(() => {
     if (!selectedMerchantId || !submittedAmount || submittedAmount <= 0) {
       queueMicrotask(() => setPayload(""));
+      queueMicrotask(() => setQrError(""));
       return;
     }
 
     queueMicrotask(() => setLoading(true));
+    queueMicrotask(() => setQrError(""));
     fetch(
       `${API_BASE_URL}/qris?merchant_id=${selectedMerchantId}&amount=${submittedAmount}`
     )
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || `QRIS request failed with status ${res.status}`);
+        }
+        return data;
+      })
       .then((data) => {
+        if (!data.qris_payload) {
+          throw new Error("QRIS payload missing from response");
+        }
         setPayload(data.qris_payload);
         setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to fetch QRIS payload", err);
+        setPayload("");
+        setQrError(err.message || "Failed to generate QR");
         setLoading(false);
       });
   }, [selectedMerchantId, submittedAmount]);
@@ -214,6 +228,8 @@ export default function App() {
         <div style={styles.qrWrapper}>
           {loading ? (
             <p>Generating QR...</p>
+          ) : qrError ? (
+            <p style={{ color: "#b91c1c", textAlign: "center" }}>{qrError}</p>
           ) : payload ? (
             <>
               <QRCodeCanvas value={payload} size={220} />

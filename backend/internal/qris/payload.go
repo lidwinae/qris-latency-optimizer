@@ -8,6 +8,20 @@ import (
 	"unicode"
 )
 
+type Codec struct{}
+
+func NewCodec() Codec {
+	return Codec{}
+}
+
+func (Codec) GeneratePayload(amount int, merchantName string, qrID string) (string, error) {
+	return GeneratePayload(amount, merchantName, qrID)
+}
+
+func (Codec) ParsePayload(payload string) (string, int, error) {
+	return ParsePayload(payload)
+}
+
 func tlv(tag string, value string) string {
 	length := fmt.Sprintf("%02d", len(value))
 	return tag + length + value

@@ -11,6 +11,24 @@ func transactionCacheKey(id string) string {
 	return fmt.Sprintf("transaction:%s", id)
 }
 
+type TransactionCache struct{}
+
+func NewTransactionCache() TransactionCache {
+	return TransactionCache{}
+}
+
+func (TransactionCache) GetTransaction(id string) (*entity.Transaction, bool) {
+	return GetTransaction(id)
+}
+
+func (TransactionCache) CacheTransaction(tx entity.Transaction) {
+	CacheTransaction(tx)
+}
+
+func (TransactionCache) DeleteTransaction(id string) {
+	DeleteTransaction(id)
+}
+
 func GetTransaction(id string) (*entity.Transaction, bool) {
 	if !RedisAvailable || id == "" {
 		middleware.RecordCacheLookup("transaction", "error")

@@ -1,13 +1,9 @@
 package usecase
 
 import (
-	"encoding/json"
 	"errors"
 	"qris-latency-optimizer/domain/entity"
 	"qris-latency-optimizer/domain/repository"
-	"qris-latency-optimizer/internal/qris"
-	"qris-latency-optimizer/repository/rabbitmq"
-	"qris-latency-optimizer/repository/redis"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,12 +17,33 @@ type TransactionUsecase interface {
 }
 
 type transactionUsecase struct {
-	txRepo       repository.TransactionRepository
-	merchantRepo repository.MerchantRepository
+	txRepo                repository.TransactionRepository
+	merchantRepo          repository.MerchantRepository
+	txCache               TransactionCache
+	merchantCache         MerchantCache
+	paymentPublisher      PaymentPublisher
+	notificationPublisher NotificationPublisher
+	qrisCodec             QRISCodec
 }
 
-func NewTransactionUsecase(txRepo repository.TransactionRepository, merchantRepo repository.MerchantRepository) TransactionUsecase {
-	return &transactionUsecase{txRepo: txRepo, merchantRepo: merchantRepo}
+func NewTransactionUsecase(
+	txRepo repository.TransactionRepository,
+	merchantRepo repository.MerchantRepository,
+	txCache TransactionCache,
+	merchantCache MerchantCache,
+	paymentPublisher PaymentPublisher,
+	notificationPublisher NotificationPublisher,
+	qrisCodec QRISCodec,
+) TransactionUsecase {
+	return &transactionUsecase{
+		txRepo:                txRepo,
+		merchantRepo:          merchantRepo,
+		txCache:               txCache,
+		merchantCache:         merchantCache,
+		paymentPublisher:      paymentPublisher,
+		notificationPublisher: notificationPublisher,
+		qrisCodec:             qrisCodec,
+	}
 }
 
 func (u *transactionUsecase) ScanQR(req entity.ScanQRRequest) (*entity.TransactionResponse, error) {
@@ -40,18 +57,18 @@ func (u *transactionUsecase) ScanQR(req entity.ScanQRRequest) (*entity.Transacti
 		}
 	} else {
 		// cache lookup
-		if cached, ok := redis.GetMerchant(req.MerchantID); ok {
+		if cached, ok := u.merchantCache.GetMerchant(req.MerchantID); ok {
 			merchant = cached
 		} else {
 			merchant, err = u.merchantRepo.FindByQRID(req.MerchantID)
 			if err != nil {
 				return nil, errors.New("merchant not found")
 			}
-			redis.CacheMerchant(*merchant)
+			u.merchantCache.CacheMerchant(*merchant)
 		}
 	}
 
-	qrMerchantID, qrAmount, err := qris.ParsePayload(req.QRPayload)
+	qrMerchantID, qrAmount, err := u.qrisCodec.ParsePayload(req.QRPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +91,7 @@ func (u *transactionUsecase) ScanQR(req entity.ScanQRRequest) (*entity.Transacti
 		return nil, errors.New("failed to create transaction")
 	}
 
-	redis.CacheTransaction(tx)
+	u.txCache.CacheTransaction(tx)
 
 	return &entity.TransactionResponse{
 		TransactionID: tx.ID.String(),
@@ -91,12 +108,7 @@ func (u *transactionUsecase) ConfirmPaymentAsync(transactionIDStr string) error 
 		return errors.New("invalid transaction id")
 	}
 
-	event := map[string]string{
-		"transaction_id": transactionIDStr,
-	}
-	eventJSON, _ := json.Marshal(event)
-
-	err := rabbitmq.PublishMessage(string(eventJSON))
+	err := u.paymentPublisher.PublishPaymentConfirmation(transactionIDStr)
 	if err != nil {
 		return errors.New("failed to queue transaction: " + err.Error())
 	}
@@ -116,7 +128,7 @@ func (u *transactionUsecase) ConfirmPaymentSync(transactionIDStr string) (*entit
 		return nil, errors.New("transaction not found")
 	}
 
-	redis.DeleteTransaction(transactionIDStr)
+	u.txCache.DeleteTransaction(transactionIDStr)
 
 	tx, err := u.txRepo.FindByID(transactionIDStr)
 	if err != nil {
@@ -124,7 +136,7 @@ func (u *transactionUsecase) ConfirmPaymentSync(transactionIDStr string) (*entit
 	}
 
 	go func() {
-		_ = rabbitmq.PublishNotification(
+		_ = u.notificationPublisher.PublishNotification(
 			tx.ID.String(),
 			tx.MerchantID.String(),
 			tx.Merchant.MerchantName,
@@ -147,7 +159,7 @@ func (u *transactionUsecase) GetTransactionStatus(transactionIDStr string) (*ent
 	}
 
 	// Cache check
-	if tx, ok := redis.GetTransaction(transactionIDStr); ok {
+	if tx, ok := u.txCache.GetTransaction(transactionIDStr); ok {
 		return &entity.TransactionResponse{
 			TransactionID: tx.ID.String(),
 			MerchantID:    tx.MerchantID.String(),
@@ -163,7 +175,7 @@ func (u *transactionUsecase) GetTransactionStatus(transactionIDStr string) (*ent
 		return nil, errors.New("transaction not found")
 	}
 
-	redis.CacheTransaction(*tx)
+	u.txCache.CacheTransaction(*tx)
 
 	return &entity.TransactionResponse{
 		TransactionID: tx.ID.String(),

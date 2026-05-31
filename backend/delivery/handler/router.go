@@ -21,7 +21,7 @@ func SetupRouter(h *Handlers, wsHub *websocket.Hub) *gin.Engine {
 	middleware.CorsHandler(r)
 	r.Use(middleware.PrometheusMiddleware())
 
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(middleware.Registry, promhttp.HandlerOpts{})))
 
 	r.GET("/api/qris", h.QRIS.GenerateDynamic)
 	r.GET("/api/merchants", h.Merchant.GetMerchants)

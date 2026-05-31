@@ -13,6 +13,30 @@ func merchantCacheKey(qrID string) string {
 	return "merchant:" + qrID
 }
 
+type MerchantCache struct{}
+
+func NewMerchantCache() MerchantCache {
+	return MerchantCache{}
+}
+
+func (MerchantCache) GetMerchant(qrID string) (*entity.Merchant, bool) {
+	return GetMerchant(qrID)
+}
+
+func (MerchantCache) CacheMerchant(merchant entity.Merchant) {
+	CacheMerchant(merchant)
+}
+
+type MerchantPrefetcher struct{}
+
+func NewMerchantPrefetcher() MerchantPrefetcher {
+	return MerchantPrefetcher{}
+}
+
+func (MerchantPrefetcher) PrefetchRelatedMerchants(currentQRID string) {
+	PrefetchRelatedMerchants(currentQRID)
+}
+
 // PrefetchMerchant ambil 1 merchant dari DB dan simpan ke Redis.
 func PrefetchMerchant(qrID string) {
 	if !RedisAvailable || qrID == "" {
