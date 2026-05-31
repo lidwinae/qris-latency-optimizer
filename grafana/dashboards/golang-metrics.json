@@ -1,46 +1,362 @@
 {
-  "title": "Go Backend Metrics",
+  "title": "QRIS Live Simulation Dashboard",
   "uid": "golang-metrics",
+  "schemaVersion": 38,
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "panels": [
     {
+      "type": "row",
+      "title": "Live Overview",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
       "type": "stat",
-      "title": "Total HTTP Requests",
+      "title": "Request Rate",
       "targets": [
         {
-          "expr": "sum(http_requests_total)",
+          "expr": "sum(rate(http_requests_total[1m]))",
           "refId": "A"
         }
       ],
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 }
-    },
-    {
-      "type": "timeseries",
-      "title": "Request Rate (per second)",
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total[1m])) by (method, path)",
-          "refId": "A",
-          "legendFormat": "{{method}} {{path}}"
-        }
-      ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
-    },
-    {
-      "type": "timeseries",
-      "title": "95th Percentile Latency",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, method, path))",
-          "refId": "A",
-          "legendFormat": "{{method}} {{path}}"
-        }
-      ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "reqps",
+          "decimals": 2
         }
-      }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Requests in Range",
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total[$__range]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) / clamp_min(sum(rate(http_requests_total[1m])), 0.001)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Transactions Created",
+      "targets": [
+        {
+          "expr": "sum(increase(transactions_created_total[$__range]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Traffic by Network Mode",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (network_mode)",
+          "refId": "A",
+          "legendFormat": "{{network_mode}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 5 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Payment Confirmation Rate",
+      "targets": [
+        {
+          "expr": "sum(rate(payment_confirmations_total[1m])) by (mode, result)",
+          "refId": "A",
+          "legendFormat": "{{mode}} {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 5 }
+    },
+    {
+      "type": "row",
+      "title": "Normal vs Rural Latency",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 }
+    },
+    {
+      "type": "timeseries",
+      "title": "P95 Server Latency by Network Mode",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, network_mode)) * 1000",
+          "refId": "A",
+          "legendFormat": "{{network_mode}} server"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 }
+    },
+    {
+      "type": "timeseries",
+      "title": "P95 Client Latency by Network Mode",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(client_request_duration_seconds_bucket[1m])) by (le, network_mode)) * 1000",
+          "refId": "A",
+          "legendFormat": "{{network_mode}} client"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Approx Network Overhead",
+      "targets": [
+        {
+          "expr": "(histogram_quantile(0.95, sum(rate(client_request_duration_seconds_bucket[1m])) by (le, network_mode)) - histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, network_mode))) * 1000",
+          "refId": "A",
+          "legendFormat": "{{network_mode}} client - server"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 }
+    },
+    {
+      "type": "table",
+      "title": "Slowest Endpoints by P95 Server Latency",
+      "targets": [
+        {
+          "expr": "sort_desc(histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, method, path, network_mode)) * 1000)",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 3
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 }
+    },
+    {
+      "type": "row",
+      "title": "Payment Flow",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Async vs Sync Confirm P95",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(payment_confirmation_duration_seconds_bucket[1m])) by (le, mode)) * 1000",
+          "refId": "A",
+          "legendFormat": "{{mode}} confirm"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 30 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Async Confirmations Queued",
+      "targets": [
+        {
+          "expr": "sum(rate(payment_confirmations_total{mode=\"async\",result=\"queued\"}[1m]))",
+          "refId": "A",
+          "legendFormat": "async queued"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 30 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Processed Confirmations",
+      "targets": [
+        {
+          "expr": "sum(rate(payment_worker_processed_total[1m])) by (result)",
+          "refId": "A",
+          "legendFormat": "worker {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 30 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Processing P95",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(payment_worker_duration_seconds_bucket[1m])) by (le)) * 1000",
+          "refId": "A",
+          "legendFormat": "worker p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 38 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Payment Confirmation Results",
+      "targets": [
+        {
+          "expr": "sum(increase(payment_confirmations_total[$__range])) by (mode, result)",
+          "refId": "A",
+          "legendFormat": "{{mode}} {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 38 }
+    },
+    {
+      "type": "row",
+      "title": "Cache and Backend Health",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Merchant Cache Hit/Miss",
+      "targets": [
+        {
+          "expr": "sum(rate(cache_lookup_total{type=\"merchant\"}[1m])) by (result)",
+          "refId": "A",
+          "legendFormat": "merchant {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 46 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transaction Cache Hit/Miss",
+      "targets": [
+        {
+          "expr": "sum(rate(cache_lookup_total{type=\"transaction\"}[1m])) by (result)",
+          "refId": "A",
+          "legendFormat": "transaction {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 46 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Cache Writes",
+      "targets": [
+        {
+          "expr": "sum(rate(cache_write_total[1m])) by (type, result)",
+          "refId": "A",
+          "legendFormat": "{{type}} {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 46 }
     },
     {
       "type": "timeseries",
@@ -48,50 +364,35 @@
       "targets": [
         {
           "expr": "go_goroutines",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "goroutines"
         }
       ],
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 53 }
     },
     {
       "type": "timeseries",
-      "title": "Go Heap Memory Usage",
+      "title": "Go Heap Memory",
       "targets": [
         {
           "expr": "go_memstats_heap_alloc_bytes",
-          "refId": "A"
-        }
-      ],
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Client vs Server Latency (Rural Lag)",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(client_request_duration_seconds_bucket[1m])) by (le, method, path))",
           "refId": "A",
-          "legendFormat": "Client RTT: {{method}} {{path}}"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, method, path))",
-          "refId": "B",
-          "legendFormat": "Server Time: {{method}} {{path}}"
+          "legendFormat": "heap allocated"
         }
       ],
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "bytes",
+          "decimals": 0
         }
-      }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 53 }
     }
-  ],
-  "schemaVersion": 38,
-  "timezone": "browser"
+  ]
 }

@@ -2,8 +2,10 @@ package handler
 
 import (
 	"net/http"
+	"qris-latency-optimizer/delivery/middleware"
 	"qris-latency-optimizer/domain/entity"
 	"qris-latency-optimizer/usecase"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -39,12 +41,15 @@ func (h *TransactionHandler) ScanQR(c *gin.Context) {
 		"data":    resp,
 		"message": "transaction created successfully",
 	})
+	middleware.RecordTransactionCreated()
 }
 
 func (h *TransactionHandler) ConfirmPaymentAsync(c *gin.Context) {
+	start := time.Now()
 	transactionID := c.Param("id")
 	err := h.usecase.ConfirmPaymentAsync(transactionID)
 	if err != nil {
+		middleware.RecordPaymentConfirmation("async", "error", time.Since(start).Seconds())
 		status := http.StatusBadRequest
 		if err.Error() != "invalid transaction id" {
 			status = http.StatusInternalServerError
@@ -60,12 +65,15 @@ func (h *TransactionHandler) ConfirmPaymentAsync(c *gin.Context) {
 		},
 		"message": "payment accepted and is being processed in background",
 	})
+	middleware.RecordPaymentConfirmation("async", "queued", time.Since(start).Seconds())
 }
 
 func (h *TransactionHandler) ConfirmPaymentSync(c *gin.Context) {
+	start := time.Now()
 	transactionID := c.Param("id")
 	resp, err := h.usecase.ConfirmPaymentSync(transactionID)
 	if err != nil {
+		middleware.RecordPaymentConfirmation("sync", "error", time.Since(start).Seconds())
 		status := http.StatusBadRequest
 		if err.Error() == "transaction not found" {
 			status = http.StatusNotFound
@@ -80,6 +88,7 @@ func (h *TransactionHandler) ConfirmPaymentSync(c *gin.Context) {
 		"data":    resp,
 		"message": "payment confirmed successfully (sync)",
 	})
+	middleware.RecordPaymentConfirmation("sync", "success", time.Since(start).Seconds())
 }
 
 func (h *TransactionHandler) GetTransactionStatus(c *gin.Context) {

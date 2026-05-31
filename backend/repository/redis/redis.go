@@ -36,7 +36,7 @@ func ConnectRedis() {
 	}
 
 	RedisAvailable = true
-	fmt.Println("✓ Redis connected successfully")
+	fmt.Println("Redis connected successfully")
 }
 
 // Get - ambil data dari Redis

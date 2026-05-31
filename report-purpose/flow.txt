@@ -209,23 +209,28 @@ Payment Confirmations Queue:
 Prometheus scrapes the backend /metrics endpoint every 15 seconds.
 
 Server-side metrics collected:
-- http_requests_total: counter of all HTTP requests by method, path, and status.
-- http_request_duration_seconds: histogram of request latency by method and path.
+- http_requests_total: counter of all HTTP requests by method, path, status, and network_mode.
+- http_request_duration_seconds: histogram of request latency by method, path, and network_mode.
+- transactions_created_total: count of created payment transactions.
+- payment_confirmations_total: count of async/sync confirmation outcomes.
+- payment_confirmation_duration_seconds: async/sync confirmation latency.
+- payment_worker_processed_total: count of worker-processed async confirmations.
+- payment_worker_duration_seconds: worker processing latency.
+- cache_lookup_total: Redis lookup hit/miss/error count.
+- cache_write_total: Redis write success/error count.
 - Go runtime metrics: goroutines, heap memory, GC stats.
 
 Client-side telemetry:
 - Customer app measures round-trip time for every API request using Axios interceptors.
 - Customer app sends measured duration to POST /api/telemetry.
-- Backend records this as client_request_duration_seconds in Prometheus.
+- Backend records this as client_request_duration_seconds in Prometheus with network_mode.
 - Allows direct comparison between server processing time and actual user experience.
 
 Grafana dashboard panels:
-- Total HTTP Requests (stat)
-- Request Rate per second (timeseries)
-- 95th Percentile Latency (timeseries)
-- Go Goroutines (timeseries)
-- Heap Memory Usage (timeseries)
-- Client vs Server Latency / Rural Lag (timeseries)
+- Live Overview: request rate, request totals, error rate, traffic split, transaction count, payment rate.
+- Normal vs Rural Latency: P95 server latency, P95 client latency, network overhead, slowest endpoints.
+- Payment Flow: async vs sync confirmation latency, queued async confirmations, worker throughput, worker P95.
+- Cache and Backend Health: merchant/transaction cache behavior, Redis writes, goroutines, heap memory.
 
 Access:
 - Prometheus: http://localhost:9090

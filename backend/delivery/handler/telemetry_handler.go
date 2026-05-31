@@ -8,9 +8,9 @@ import (
 )
 
 type TelemetryPayload struct {
-	Path            string  `json:"path" binding:"required"`
-	Method          string  `json:"method" binding:"required"`
-	DurationMs      float64 `json:"client_duration_ms" binding:"required"`
+	Path       string  `json:"path" binding:"required"`
+	Method     string  `json:"method" binding:"required"`
+	DurationMs float64 `json:"client_duration_ms" binding:"required"`
 }
 
 type TelemetryHandler struct{}
@@ -30,7 +30,8 @@ func (h *TelemetryHandler) ReceiveTelemetry(c *gin.Context) {
 	durationSec := payload.DurationMs / 1000.0
 
 	// Record the metric using our Prometheus middleware function
-	middleware.RecordClientLatency(payload.Method, payload.Path, durationSec)
+	networkMode := middleware.NetworkModeFromHost(c.Request.Host)
+	middleware.RecordClientLatency(payload.Method, payload.Path, networkMode, durationSec)
 
 	c.JSON(http.StatusOK, gin.H{"status": "recorded"})
 }

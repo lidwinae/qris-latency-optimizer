@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"qris-latency-optimizer/delivery/middleware"
 	"qris-latency-optimizer/repository/rabbitmq"
 	"qris-latency-optimizer/usecase"
 )
@@ -33,12 +34,14 @@ func StartPaymentConsumer(txUsecase usecase.TransactionUsecase) {
 			var event map[string]string
 			if err := json.Unmarshal(d.Body, &event); err != nil {
 				log.Printf("[Worker] Error unmarshalling message: %v | Body: %s", err, string(d.Body))
+				middleware.RecordPaymentWorkerProcessed("error", time.Since(processStart).Seconds())
 				continue
 			}
 
 			transactionID := event["transaction_id"]
 			if transactionID == "" {
 				log.Printf("[Worker] Skipping message with empty transaction_id")
+				middleware.RecordPaymentWorkerProcessed("error", time.Since(processStart).Seconds())
 				continue
 			}
 
@@ -46,10 +49,12 @@ func StartPaymentConsumer(txUsecase usecase.TransactionUsecase) {
 			_, err := txUsecase.ConfirmPaymentSync(transactionID)
 			if err != nil {
 				log.Printf("[Worker] Failed to update transaction %s: %v", transactionID, err)
+				middleware.RecordPaymentWorkerProcessed("error", time.Since(processStart).Seconds())
 				continue
 			}
 
 			elapsed := time.Since(processStart)
+			middleware.RecordPaymentWorkerProcessed("success", elapsed.Seconds())
 			log.Printf("[Worker] Confirmed payment %s in %v", transactionID, elapsed)
 		}
 	}()

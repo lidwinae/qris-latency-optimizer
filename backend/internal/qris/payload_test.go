@@ -159,7 +159,7 @@ func TestCRC16(t *testing.T) {
 	// Different input should produce different CRC
 	result3 := crc16("world")
 	if result == result3 {
-		t.Error("different inputs produced same CRC — unexpected collision")
+		t.Error("different inputs produced same CRC - unexpected collision")
 	}
 }
 

@@ -47,7 +47,7 @@ export default function PaymentForm({ onSubmit, isLoading, scannedQR }) {
   return (
     <div className="payment-form-container">
       <div className="form-card">
-        <h2>💳 Payment Details</h2>
+        <h2>Payment Details</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -97,7 +97,7 @@ export default function PaymentForm({ onSubmit, isLoading, scannedQR }) {
             disabled={isLoading || !formData.merchantId || !formData.amount}
             className="submit-button"
           >
-            {isLoading ? '⏳ Processing...' : '✓ Confirm Payment'}
+            {isLoading ? 'Processing...' : 'Confirm Payment'}
           </button>
         </form>
       </div>

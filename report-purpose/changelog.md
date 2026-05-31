@@ -167,7 +167,7 @@ Backend
 11. Graceful shutdown and improved startup sequence
 - Refactored `backend/cmd/main.go` to implement robust graceful shutdown handling using a signal listener (`SIGINT`, `SIGTERM`).
 - The server now closes its RabbitMQ channel/connection cleanly and allows active HTTP requests to complete within a 5-second graceful timeout.
-- Added clean connection/startup verification messages (`✓`) in terminal logs.
+- Added clean connection/startup verification messages in terminal logs.
 
 12. CORS and configuration updates
 - Refactored CORS configuration in `backend/delivery/handler/cors.go` with dynamic allowed origins logic to support any development origin under ports `:5173` and `:5174` (allowing local LAN testing/IPs).

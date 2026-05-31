@@ -4,11 +4,11 @@
 
 TOXIPROXY_API="http://localhost:8474"
 
-echo "⏳ Waiting for Toxiproxy to be ready..."
+echo "Waiting for Toxiproxy to be ready..."
 until curl -s "$TOXIPROXY_API/version" > /dev/null 2>&1; do
   sleep 1
 done
-echo "✓ Toxiproxy is ready"
+echo "Toxiproxy is ready"
 
 # Delete existing proxy if it exists
 curl -s -X DELETE "$TOXIPROXY_API/proxies/golang_rural" > /dev/null 2>&1
@@ -53,8 +53,8 @@ curl -s -X POST "$TOXIPROXY_API/proxies/golang_rural/toxics" \
   }'
 
 echo ""
-echo "✓ Rural 3G simulation active on port 8081"
-echo "  - Latency: 500ms ± 100ms jitter"
+echo "Rural 3G simulation active on port 8081"
+echo "  - Latency: 500ms +/- 100ms jitter"
 echo "  - Bandwidth: ~400kbps"
 echo ""
 echo "Test it:  curl http://localhost:8081/api/ping"

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"qris-latency-optimizer/delivery/middleware"
 	"qris-latency-optimizer/domain/entity"
 	"qris-latency-optimizer/repository/postgres"
 )
@@ -15,6 +16,7 @@ func merchantCacheKey(qrID string) string {
 // PrefetchMerchant ambil 1 merchant dari DB dan simpan ke Redis.
 func PrefetchMerchant(qrID string) {
 	if !RedisAvailable || qrID == "" {
+		middleware.RecordCacheWrite("merchant", "error")
 		return
 	}
 
@@ -34,7 +36,11 @@ func PrefetchMerchant(qrID string) {
 		return
 	}
 
-	_ = Set(cacheKey, string(data), TTLMerchant)
+	if err := Set(cacheKey, string(data), TTLMerchant); err != nil {
+		middleware.RecordCacheWrite("merchant", "error")
+		return
+	}
+	middleware.RecordCacheWrite("merchant", "success")
 }
 
 // PrefetchRelatedMerchants prefetch merchant lain secara spekulatif.
@@ -90,34 +96,44 @@ func WarmUpCache() {
 
 func GetMerchant(qrID string) (*entity.Merchant, bool) {
 	if !RedisAvailable || qrID == "" {
+		middleware.RecordCacheLookup("merchant", "error")
 		return nil, false
 	}
 
 	cachedData, err := Get(merchantCacheKey(qrID))
 	if err != nil || cachedData == "" {
+		middleware.RecordCacheLookup("merchant", "miss")
 		return nil, false
 	}
 
 	var merchant entity.Merchant
 	if err := json.Unmarshal([]byte(cachedData), &merchant); err != nil {
 		_ = Delete(merchantCacheKey(qrID))
+		middleware.RecordCacheLookup("merchant", "error")
 		return nil, false
 	}
 
+	middleware.RecordCacheLookup("merchant", "hit")
 	return &merchant, true
 }
 
 func CacheMerchant(merchant entity.Merchant) {
 	if !RedisAvailable || merchant.QRID == "" {
+		middleware.RecordCacheWrite("merchant", "error")
 		return
 	}
 
 	data, err := json.Marshal(merchant)
 	if err != nil {
+		middleware.RecordCacheWrite("merchant", "error")
 		return
 	}
 
-	_ = Set(merchantCacheKey(merchant.QRID), string(data), TTLMerchant)
+	if err := Set(merchantCacheKey(merchant.QRID), string(data), TTLMerchant); err != nil {
+		middleware.RecordCacheWrite("merchant", "error")
+		return
+	}
+	middleware.RecordCacheWrite("merchant", "success")
 }
 
 func DeleteMerchant(qrID string) error {

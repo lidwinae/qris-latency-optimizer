@@ -26,7 +26,7 @@ case "$TEST" in
     ;;
 esac
 
-echo "🌾 Running K6 load test: $SCRIPT (Rural 3G via Toxiproxy)"
+echo "Running K6 load test: $SCRIPT (Rural 3G via Toxiproxy)"
 echo "   Target: $BASE_URL (proxied through Toxiproxy)"
 echo ""
 echo "   Make sure you ran ./k6/rural_test_setup.sh first!"

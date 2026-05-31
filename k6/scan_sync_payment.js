@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-// ── Configuration ──────────────────────────────────────────
+// Configuration
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 
 export const options = {
@@ -15,7 +15,7 @@ export const options = {
   },
 };
 
-// ── Setup: Get merchant UUID and generate a QRIS payload ──
+// Setup: Get merchant UUID and generate a QRIS payload
 export function setup() {
   const res = http.get(`${BASE_URL}/api/merchants`);
   const body = JSON.parse(res.body);
@@ -50,7 +50,7 @@ export function setup() {
   };
 }
 
-// ── Main test: Scan + Sync Confirm (Baseline) ─────────────
+// Main test: Scan + Sync Confirm (Baseline)
 export default function (data) {
   const headers = { 'Content-Type': 'application/json' };
 

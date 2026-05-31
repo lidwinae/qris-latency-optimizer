@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-// ── Configuration ──────────────────────────────────────────
+// Configuration
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 
 export const options = {
@@ -15,7 +15,7 @@ export const options = {
   },
 };
 
-// ── Setup: Fetch a real merchant UUID before VUs start ─────
+// Setup: Fetch a real merchant UUID before VUs start
 export function setup() {
   const res = http.get(`${BASE_URL}/api/merchants`);
   const body = JSON.parse(res.body);
@@ -42,7 +42,7 @@ export function setup() {
   return { merchantID: merchantID };
 }
 
-// ── Main test: Generate QRIS ───────────────────────────────
+// Main test: Generate QRIS
 export default function (data) {
   const amount = Math.floor(Math.random() * 100000) + 1000; // 1000 - 101000
 

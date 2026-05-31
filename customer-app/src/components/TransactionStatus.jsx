@@ -33,7 +33,7 @@ export default function TransactionStatus({ transactionId, onBack }) {
     try {
       const response = await confirmPayment(transactionId);
       setTransaction(response.data);
-      alert('✓ Payment confirmed successfully!');
+      alert('Payment confirmed successfully!');
     } catch (err) {
       setError('Failed to confirm payment');
       console.error(err);
@@ -43,14 +43,14 @@ export default function TransactionStatus({ transactionId, onBack }) {
   };
 
   if (loading) {
-    return <div className="status-loading">⏳ Loading transaction...</div>;
+    return <div className="status-loading">Loading transaction...</div>;
   }
 
   if (error) {
     return (
       <div className="status-error">
         <p>{error}</p>
-        <button onClick={onBack}>← Back</button>
+        <button onClick={onBack}>Back</button>
       </div>
     );
   }
@@ -58,7 +58,7 @@ export default function TransactionStatus({ transactionId, onBack }) {
   return (
     <div className="status-container">
       <div className="status-card">
-        <h2>📋 Transaction Status</h2>
+        <h2>Transaction Status</h2>
 
         <div className="status-info">
           <div className="info-row">
@@ -85,7 +85,7 @@ export default function TransactionStatus({ transactionId, onBack }) {
           <div className="info-row">
             <span className="label">From Cache:</span>
             <span className="value">
-              {transaction?.cached_from ? '⚡ Yes (Fast!)' : '🔄 No (Database)'}
+              {transaction?.cached_from ? 'Yes (Fast!)' : 'No (Database)'}
             </span>
           </div>
 
@@ -104,18 +104,18 @@ export default function TransactionStatus({ transactionId, onBack }) {
               disabled={confirming}
               className="confirm-button"
             >
-              {confirming ? '⏳ Confirming...' : '✓ Confirm Payment'}
+              {confirming ? 'Confirming...' : 'Confirm Payment'}
             </button>
           )}
 
           {transaction?.status === 'SUCCESS' && (
             <div className="success-message">
-              ✓ Payment confirmed successfully!
+              Payment confirmed successfully!
             </div>
           )}
 
           <button onClick={onBack} className="back-button">
-            ← Scan Another QR
+            Scan Another QR
           </button>
         </div>
       </div>

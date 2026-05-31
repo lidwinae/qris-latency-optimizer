@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +17,7 @@ var (
 			Name: "http_requests_total",
 			Help: "Total number of HTTP requests",
 		},
-		[]string{"method", "path", "status"},
+		[]string{"method", "path", "status", "network_mode"},
 	)
 
 	httpRequestDuration = promauto.NewHistogramVec(
@@ -24,7 +26,7 @@ var (
 			Help:    "Duration of HTTP requests in seconds",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"method", "path"},
+		[]string{"method", "path", "network_mode"},
 	)
 
 	clientRequestDuration = promauto.NewHistogramVec(
@@ -33,12 +35,113 @@ var (
 			Help:    "Duration of HTTP requests from the client's perspective",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"method", "path"},
+		[]string{"method", "path", "network_mode"},
+	)
+
+	transactionsCreatedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "transactions_created_total",
+			Help: "Total number of created transactions",
+		},
+	)
+
+	paymentConfirmationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "payment_confirmations_total",
+			Help: "Total number of payment confirmation requests",
+		},
+		[]string{"mode", "result"},
+	)
+
+	paymentConfirmationDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "payment_confirmation_duration_seconds",
+			Help:    "Duration of payment confirmation requests in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"mode"},
+	)
+
+	paymentWorkerProcessedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "payment_worker_processed_total",
+			Help: "Total number of payment confirmation messages processed by the worker",
+		},
+		[]string{"result"},
+	)
+
+	paymentWorkerDuration = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "payment_worker_duration_seconds",
+			Help:    "Duration of payment worker processing in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
+
+	cacheLookupTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cache_lookup_total",
+			Help: "Total number of cache lookups",
+		},
+		[]string{"type", "result"},
+	)
+
+	cacheWriteTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cache_write_total",
+			Help: "Total number of cache writes",
+		},
+		[]string{"type", "result"},
 	)
 )
 
-func RecordClientLatency(method, path string, durationSeconds float64) {
-	clientRequestDuration.WithLabelValues(method, path).Observe(durationSeconds)
+func NetworkModeFromHost(host string) string {
+	if host == "" {
+		return "unknown"
+	}
+
+	_, port, err := net.SplitHostPort(host)
+	if err != nil {
+		parts := strings.Split(host, ":")
+		if len(parts) > 1 {
+			port = parts[len(parts)-1]
+		}
+	}
+
+	switch port {
+	case "8080":
+		return "normal"
+	case "8081":
+		return "rural"
+	default:
+		return "unknown"
+	}
+}
+
+func RecordClientLatency(method, path, networkMode string, durationSeconds float64) {
+	clientRequestDuration.WithLabelValues(method, path, networkMode).Observe(durationSeconds)
+}
+
+func RecordTransactionCreated() {
+	transactionsCreatedTotal.Inc()
+}
+
+func RecordPaymentConfirmation(mode, result string, durationSeconds float64) {
+	paymentConfirmationsTotal.WithLabelValues(mode, result).Inc()
+	paymentConfirmationDuration.WithLabelValues(mode).Observe(durationSeconds)
+}
+
+func RecordPaymentWorkerProcessed(result string, durationSeconds float64) {
+	paymentWorkerProcessedTotal.WithLabelValues(result).Inc()
+	paymentWorkerDuration.Observe(durationSeconds)
+}
+
+func RecordCacheLookup(cacheType, result string) {
+	cacheLookupTotal.WithLabelValues(cacheType, result).Inc()
+}
+
+func RecordCacheWrite(cacheType, result string) {
+	cacheWriteTotal.WithLabelValues(cacheType, result).Inc()
 }
 
 func PrometheusMiddleware() gin.HandlerFunc {
@@ -50,14 +153,15 @@ func PrometheusMiddleware() gin.HandlerFunc {
 
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Writer.Status())
-		
+
 		// Use c.FullPath() so that dynamic routes like /api/transactions/:id are grouped
 		path := c.FullPath()
 		if path == "" {
 			path = c.Request.URL.Path
 		}
+		networkMode := NetworkModeFromHost(c.Request.Host)
 
-		httpRequestsTotal.WithLabelValues(c.Request.Method, path, status).Inc()
-		httpRequestDuration.WithLabelValues(c.Request.Method, path).Observe(duration)
+		httpRequestsTotal.WithLabelValues(c.Request.Method, path, status, networkMode).Inc()
+		httpRequestDuration.WithLabelValues(c.Request.Method, path, networkMode).Observe(duration)
 	}
 }

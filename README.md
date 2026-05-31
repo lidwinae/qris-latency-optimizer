@@ -1,4 +1,4 @@
-# QRIS Latency Optimizer 🚀
+# QRIS Latency Optimizer
 
 Full-stack QRIS payment simulation with:
 - Go backend
@@ -62,6 +62,16 @@ Need:
 - Docker / Docker Desktop running
 - Go installed
 - Node.js installed
+
+Create a local `.env` file from the example if it does not exist:
+
+```bash
+cp .env_example .env
+```
+
+The `.env` defaults are suitable for running the backend locally. Docker Compose
+overrides container-only hostnames internally, for example `DB_HOST=db`,
+`REDIS_HOST=redis`, and `RABBITMQ_HOST=rabbitmq`.
 
 ## 1. Start Infrastructure
 
@@ -383,13 +393,15 @@ http://localhost:9090/targets
 
 ### Grafana
 
-Pre-configured dashboard with:
-- Total HTTP Requests
-- Request Rate (per second)
-- 95th Percentile Latency
-- Go Goroutines
-- Heap Memory Usage
-- Client vs Server Latency (Rural Lag)
+Pre-configured live simulation dashboard with:
+- request rate, request totals, and error rate
+- normal vs rural traffic split
+- P95 server latency, client latency, and network overhead
+- slowest endpoint table
+- async vs sync payment confirmation metrics
+- RabbitMQ worker processing metrics
+- Redis cache lookup/write metrics
+- Go goroutines and heap memory
 
 Open:
 
@@ -401,7 +413,7 @@ Default credentials: `admin` / `admin`
 
 ### Client Telemetry
 
-The customer app automatically measures round-trip time for every API request and sends it to `POST /api/telemetry`. This data appears on the Grafana dashboard as `client_request_duration_seconds`, allowing comparison between server processing time and what the user actually experiences.
+The customer app automatically measures round-trip time for every API request and sends it to `POST /api/telemetry`. This data appears on the Grafana dashboard as `client_request_duration_seconds`, allowing comparison between server processing time and what the user actually experiences. Metrics include a `network_mode` label so normal port `8080` traffic and rural Toxiproxy port `8081` traffic can be compared live.
 
 ## Load Testing (K6)
 
@@ -442,7 +454,7 @@ Then run tests through the proxy:
 ## Rural Network Simulation (Toxiproxy)
 
 Toxiproxy intercepts traffic on port `8081` and adds:
-- 500ms latency ± 100ms jitter
+- 500ms latency +/- 100ms jitter
 - ~400kbps bandwidth limit (simulating 3G)
 
 Compare normal vs rural:
@@ -454,7 +466,28 @@ curl http://localhost:8081/api/ping   # rural (~500ms)
 
 ### Manual Rural Testing (Customer App)
 
-To manually test the customer app through the rural simulator:
+The Docker customer app can be switched between normal backend traffic and
+rural-simulated traffic:
+
+```bash
+./scripts/customer-app-mode.sh normal
+./scripts/customer-app-mode.sh rural
+./scripts/customer-app-mode.sh status
+```
+
+Normal mode sends customer app API traffic to backend port `8080`.
+
+Rural mode configures Toxiproxy, recreates the customer app container, and sends
+customer app API traffic through port `8081`.
+
+The switch is controlled by `CUSTOMER_APP_API_PORT` in `.env`:
+
+```text
+CUSTOMER_APP_API_PORT=8080  # normal
+CUSTOMER_APP_API_PORT=8081  # rural
+```
+
+You can still run the customer app manually through the rural simulator:
 
 ```bash
 cd customer-app

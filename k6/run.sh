@@ -26,7 +26,7 @@ case "$TEST" in
     ;;
 esac
 
-echo "🚀 Running K6 load test: $SCRIPT (Normal Network)"
+echo "Running K6 load test: $SCRIPT (Normal Network)"
 echo "   Target: $BASE_URL"
 echo ""
 
