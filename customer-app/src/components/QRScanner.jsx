@@ -79,12 +79,12 @@ export default function QRScanner({ onScan, isScanning }) {
           className={`torch-button ${torchActive ? 'active' : ''}`}
           onClick={toggleTorch}
         >
-          {torchActive ? '💡 Torch On' : '💡 Torch Off'}
+          {torchActive ? 'Torch On' : 'Torch Off'}
         </button>
       )}
 
       <div className="scanner-info">
-        <p>🔍 Scanning in progress...</p>
+        <p>Scanning in progress...</p>
       </div>
     </div>
   );

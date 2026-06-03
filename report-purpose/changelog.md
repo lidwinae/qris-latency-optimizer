@@ -1,116 +1,197 @@
-Changelog
-=========
+Change Report Compared With Upstream Main
+=========================================
 
-Backend
--------
+Comparison base: upstream/main
+Current branch: newMonitor
 
-1. QRIS payload generation
-- Replaced mostly static QR payload generation with input-based generation.
-- Payload now uses:
-  - merchant name from database
-  - merchant QRID from database
-  - amount from request
-- Added QRIS CRC generation.
-- Default city set to MALANG.
-- Added QR payload parsing and validation:
-  - parse merchant QRID from tag 26.01
-  - parse amount from tag 54
-  - validate CRC
-
-2. Merchant identifier cleanup
-- Clarified merchant identifiers:
-  - `ID` = UUID primary key
-  - `QRID` = merchant QR identifier, stored in `qr_id`
-- Renamed merchant field from confusing `QRIS` to `QRID`.
-
-3. Transaction scan flow hardening
-- Added validation for `merchant_id`.
-- Allowed `merchant_id` in scan request to be:
-  - UUID
-  - QRID like `TEST001`
-- Added merchant active/existence validation before transaction create.
-- Added QR payload validation in scan flow:
-  - merchant in QR must match selected merchant
-  - amount in QR must match request amount
-- Removed panic-prone `uuid.MustParse` usage in scan flow.
-
-4. Transaction status and confirm flow hardening
-- Transaction status now:
-  - checks Redis first
-  - falls back to Postgres
-  - deletes corrupted cached transaction payload
-- Confirm payment now:
-  - checks rows affected
-  - returns not found if transaction does not exist
-  - reloads updated transaction safely
-
-5. Redis changes
-- Redis startup changed from implicit package `init()` to explicit startup call.
-- Added merchant cache helpers:
-  - `WarmUpCache()`
-  - `PrefetchMerchant()`
-  - `PrefetchRelatedMerchants()`
-  - `GetMerchant()`
-  - `CacheMerchant()`
-- Warm-up of merchant cache now runs at backend startup.
-- Transaction cache uses shared TTL constant.
-- Merchant cache used in customer scan flow for QRID lookup.
-- Qris generation flow now caches merchant and triggers related merchant prefetch.
-
-6. Database bootstrap
-- Removed SQL init dependency from Docker startup.
-- Deleted old `backend/init-db/init.sql`.
-- Database creation now handled from Go:
-  - `pgcrypto` extension creation
-  - `AutoMigrate`
-  - default merchant seed
-- Added Go seed for:
-  - `TEST001` / `Kantin FILKOM UB`
-  - `TEST002` / `TESTING STORE`
-
-7. Handler/service organization
-- Merged server-side transaction status handler into `backend/usecase/service/qris.go`.
-- Deleted old separate `backend/usecase/service/transaction.go`.
-
-8. CORS
-- Replaced unsafe wildcard CORS setup.
-- Added env-based allowed origins using `CORS_ALLOWED_ORIGINS`.
-- Safer headers/method configuration.
-
-9. Environment and Compose
-- Repo layout shifted to backend-local setup:
-  - `backend/.env`
-  - `backend/.env_example`
-  - `backend/docker-compose.yml`
-- LoadEnv currently expects `.env` in backend working directory.
-- Compose now includes:
-  - Postgres
-  - Redis
-  - RedisInsight
-  - PgAdmin
-  - InfluxDB
-  - Grafana
+This document summarizes the current branch delta against upstream/main. The
+comparison was refreshed with `git fetch upstream main` before this report was
+updated.
 
 
-Customer App / Frontend
+1. Executive Summary
+--------------------
+
+The branch changes the project from a simpler QRIS backend and local monitoring
+prototype into a fuller latency-comparison system:
+
+- Backend code is reorganized into cleaner handler, middleware, usecase,
+  repository, domain, worker, and internal packages.
+- Docker Compose is moved to the repository root and now runs the API,
+  PostgreSQL, Redis, RabbitMQ, frontend apps, Prometheus, Grafana, pgAdmin,
+  RedisInsight, and Toxiproxy together.
+- QRIS generation and scan validation are backed by PostgreSQL merchant data,
+  QR CRC validation, Redis cache-aside reads, and explicit transaction status
+  APIs.
+- Payment confirmation now has two measurable paths:
+  - optimized async path through RabbitMQ: `/api/transactions/:id/confirm`
+  - baseline sync path: `/api/transactions/:id/confirm-sync`
+- Merchant dashboards receive successful payment notifications over WebSocket.
+- Prometheus, Grafana, K6, and Toxiproxy replace the removed static monitoring
+  pages and old `tests_script/` load-test files.
+
+
+2. Backend Changes
+------------------
+
+Added or changed:
+
+- `backend/cmd/main.go` now wires config loading, PostgreSQL, Redis, RabbitMQ,
+  usecases, handlers, workers, WebSocket hub, and graceful shutdown.
+- `backend/config/config.go` centralizes environment configuration.
+- `backend/delivery/handler/` now has dedicated merchant, QRIS, transaction,
+  telemetry, ping, and router files.
+- `backend/delivery/middleware/prometheus.go` adds Prometheus collectors and
+  request instrumentation.
+- `backend/domain/entity/` and `backend/domain/repository/` replace the older
+  model/service coupling with explicit entities and repository interfaces.
+- `backend/repository/postgres/` contains merchant and transaction repository
+  implementations.
+- `backend/repository/redis/` contains merchant cache, merchant prefetch, and
+  transaction cache behavior.
+- `backend/repository/rabbitmq/rabbitmq.go` declares both
+  `payment_confirmations` and `merchant_notifications` queues.
+- `backend/internal/qris/` owns QRIS payload generation/parsing and CRC tests.
+- `backend/internal/websocket/` adds the merchant WebSocket hub and connection
+  handler.
+- `backend/worker/payment_consumer.go` processes async payment confirmations
+  and merchant notification deliveries.
+
+Removed or replaced:
+
+- `backend/delivery/handler/rest.go`
+- `backend/repository/database/loadenv.go`
+- `backend/repository/database/pg.go`
+- old service files under `backend/usecase/service/`
+- old customer transaction usecase under `backend/usecase/customer/`
+- static monitoring pages under `backend/monitoring/`
+
+
+3. API And Runtime Behavior
+---------------------------
+
+Current main routes:
+
+- `GET /api/ping`
+- `GET /api/merchants`
+- `GET /api/qris?merchant_id=<merchant_uuid>&amount=<amount>`
+- `GET /api/transactions/:id`
+- `GET /api/ws/status?merchant_id=<merchant_uuid>`
+- `GET /ws?merchant_id=<merchant_uuid>`
+- `GET /metrics`
+- `POST /api/transactions/scan`
+- `POST /api/transactions/:id/confirm`
+- `POST /api/transactions/:id/confirm-sync`
+- `POST /api/telemetry`
+
+Behavior added on this branch:
+
+- QRIS scan accepts a merchant UUID or QRID, validates the QR payload, checks
+  merchant and amount consistency, creates a PENDING transaction, and caches it.
+- Transaction status reads Redis first and falls back to PostgreSQL.
+- Async confirmation queues the transaction and returns PROCESSING quickly.
+- Sync confirmation updates the transaction during the HTTP request for
+  baseline comparison.
+- Both confirmation paths publish a merchant notification after SUCCESS.
+- WebSocket clients receive `transaction_notification` events by merchant UUID.
+
+
+4. Observability And Testing
+----------------------------
+
+Added:
+
+- root `prometheus.yml`
+- Grafana datasource and dashboard provisioning under `grafana/provisioning/`
+- Grafana dashboard JSON under `grafana/dashboards/golang-metrics.json`
+- Prometheus metrics for:
+  - HTTP request totals and durations
+  - client request durations reported by the customer app
+  - transaction creation
+  - payment confirmation counts and durations
+  - payment worker processing counts and durations
+  - cache lookup and write counts
+- K6 scripts under `k6/`:
+  - `qris_generation.js`
+  - `scan_async_payment.js`
+  - `scan_sync_payment.js`
+  - `run.sh`
+  - `run_rural.sh`
+  - `rural_test_setup.sh`
+- Toxiproxy rural simulation on port 8081 with 500ms latency, 100ms jitter,
+  and about 400kbps bandwidth.
+
+Removed:
+
+- old `tests_script/` JavaScript files
+- old dashboard JSON under `tests_script/`
+- static backend monitoring HTML pages
+
+
+5. Frontend And Customer App Changes
+------------------------------------
+
+Merchant dashboard:
+
+- Loads merchants from the backend and uses merchant UUIDs for QRIS generation.
+- Generates QRIS payloads by selected merchant and submitted amount.
+- Opens a merchant-scoped WebSocket connection.
+- Displays live payment notifications when transactions reach SUCCESS.
+
+Customer app:
+
+- Extracts merchant QRID and amount from scanned QRIS payloads.
+- Creates transactions through `/api/transactions/scan`.
+- Confirms payment through the optimized async endpoint.
+- Polls transaction status.
+- Sends request-duration telemetry to `/api/telemetry`.
+- Can target normal backend traffic on port 8080 or rural Toxiproxy traffic on
+  port 8081.
+
+
+6. Environment And Operations
+-----------------------------
+
+Added root-level `.env_example` and root-level `docker-compose.yml`.
+
+Important environment groups:
+
+- PostgreSQL: `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME`
+- Redis: `REDIS_HOST`, `REDIS_PORT`
+- RabbitMQ: `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_HOST`,
+  `RABBITMQ_PORT`
+- CORS: `CORS_ALLOWED_ORIGINS`
+- WebSocket tuning: `WEBSOCKET_READ_DEADLINE`,
+  `WEBSOCKET_WRITE_DEADLINE`, `WEBSOCKET_IDLE_CHECK_INTERVAL`,
+  `WEBSOCKET_IDLE_THRESHOLD`, `WEBSOCKET_MAX_MESSAGE_SIZE`
+- Grafana and pgAdmin credentials
+
+Operational helper added:
+
+- `scripts/customer-app-mode.sh normal`
+- `scripts/customer-app-mode.sh rural`
+- `scripts/customer-app-mode.sh status`
+
+
+7. Test Coverage Added
+----------------------
+
+Added or updated backend tests include:
+
+- QRIS payload tests under `backend/internal/qris/`
+- QRIS usecase tests
+- transaction usecase tests
+- payment consumer tests
+
+
+8. Net File-Level Delta
 -----------------------
 
-1. Customer scan behavior
-- Customer app scans QR payload.
-- Customer app extracts merchant QRID and amount from scanned QR.
-- Customer app sends:
-  - `qr_payload`
-  - `merchant_id`
-  - `amount`
+The refreshed diff against upstream/main shows 81 changed paths, including:
 
-2. HTTPS experiment
-- Temporary HTTPS dev-server setup for `customer-app` was added, then reverted.
-- Current customer app Vite config is back to normal HTTP dev mode.
-
-
-Docs
-----
-
-1. Added flow documentation
-- `flow.txt`
-- `flow-mermaid.md`
+- 3,848 insertions
+- 4,787 deletions
+- root docs and Compose additions
+- monitoring/test stack additions
+- backend architecture reorganization
+- removal of old monitoring and test-script artifacts

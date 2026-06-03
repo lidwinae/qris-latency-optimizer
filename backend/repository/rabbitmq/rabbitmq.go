@@ -5,37 +5,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"qris-latency-optimizer/config"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-var (
-	Conn    *amqp.Connection
-	Channel *amqp.Channel
-	Queue   amqp.Queue
-	// Queue untuk merchant notifications
-	NotificationQueue amqp.Queue
-)
-
-// getRabbitMQURL reads the connection URL from env with fallback default
-func getRabbitMQURL() string {
-	url := os.Getenv("RABBITMQ_URL")
-	if url == "" {
-		url = "amqp://guest:guest@rabbitmq:5672/"
-	}
-	return url
+type Broker struct {
+	conn              *amqp.Connection
+	channel           *amqp.Channel
+	queue             amqp.Queue
+	notificationQueue amqp.Queue
 }
 
-// ConnectRabbitMQ connects to RabbitMQ with retry logic (3 attempts)
-func ConnectRabbitMQ() {
-	url := getRabbitMQURL()
+type Delivery struct {
+	Body []byte
+	Ack  func() error
+	Nack func(requeue bool) error
+}
+
+// ConnectRabbitMQ connects to RabbitMQ with retry logic (3 attempts).
+func ConnectRabbitMQ() *Broker {
+	url := config.App.RabbitMQURL()
+	var conn *amqp.Connection
 	var err error
 
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		Conn, err = amqp.Dial(url)
+		conn, err = amqp.Dial(url)
 		if err == nil {
 			break
 		}
@@ -51,13 +48,12 @@ func ConnectRabbitMQ() {
 		log.Fatalf("Failed to connect to RabbitMQ after %d attempts: %v", maxRetries, err)
 	}
 
-	Channel, err = Conn.Channel()
+	channel, err := conn.Channel()
 	if err != nil {
 		log.Fatalf("Failed to open RabbitMQ channel: %v", err)
 	}
 
-	// Declare the existing queue (payment_confirmations)
-	Queue, err = Channel.QueueDeclare(
+	queue, err := channel.QueueDeclare(
 		"payment_confirmations",
 		true,
 		false,
@@ -69,8 +65,7 @@ func ConnectRabbitMQ() {
 		log.Fatalf("Failed to declare queue: %v", err)
 	}
 
-	// Declare queue untuk merchant notifications
-	NotificationQueue, err = Channel.QueueDeclare(
+	notificationQueue, err := channel.QueueDeclare(
 		"merchant_notifications",
 		true,
 		false,
@@ -82,27 +77,39 @@ func ConnectRabbitMQ() {
 		log.Fatalf("Failed to declare notification queue: %v", err)
 	}
 
-	fmt.Println("✓ RabbitMQ connected successfully & Queues declared")
+	fmt.Println("RabbitMQ connected successfully & queues declared")
+	return &Broker{
+		conn:              conn,
+		channel:           channel,
+		queue:             queue,
+		notificationQueue: notificationQueue,
+	}
 }
 
-// PublishMessage publishes a JSON message to the payment_confirmations queue
-func PublishMessage(body string) error {
+func (b *Broker) PublishPaymentConfirmation(transactionID string) error {
+	event := map[string]string{
+		"transaction_id": transactionID,
+	}
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := Channel.PublishWithContext(ctx,
+	return b.channel.PublishWithContext(ctx,
 		"",
-		Queue.Name,
+		b.queue.Name,
 		false,
 		false,
 		amqp.Publishing{
 			ContentType: "application/json",
-			Body:        []byte(body),
+			Body:        eventJSON,
 		})
-	return err
 }
 
-// NotificationPayload - struktur data untuk merchant notifications
+// NotificationPayload - struktur data untuk merchant notifications.
 type NotificationPayload struct {
 	TransactionID string    `json:"transaction_id"`
 	MerchantID    string    `json:"merchant_id"`
@@ -112,9 +119,9 @@ type NotificationPayload struct {
 	Timestamp     time.Time `json:"timestamp"`
 }
 
-// PublishNotification - publish merchant notification ke queue
-func PublishNotification(txID, merchantID, merchantName string, amount float64) error {
-	if !IsConnected() {
+// PublishNotification - publish merchant notification ke queue.
+func (b *Broker) PublishNotification(txID, merchantID, merchantName string, amount float64) error {
+	if !b.IsConnected() {
 		return fmt.Errorf("RabbitMQ not connected")
 	}
 
@@ -135,9 +142,9 @@ func PublishNotification(txID, merchantID, merchantName string, amount float64) 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = Channel.PublishWithContext(ctx,
+	err = b.channel.PublishWithContext(ctx,
 		"",
-		NotificationQueue.Name,
+		b.notificationQueue.Name,
 		false,
 		false,
 		amqp.Publishing{
@@ -146,37 +153,86 @@ func PublishNotification(txID, merchantID, merchantName string, amount float64) 
 		})
 
 	if err != nil {
-		log.Printf("⚠ Failed to publish notification: %v", err)
+		log.Printf("Failed to publish notification: %v", err)
 		return err
 	}
 
-	log.Printf("✓ Notification published [TX: %s, Merchant: %s]", txID, merchantName)
+	log.Printf("Notification published [TX: %s, Merchant: %s]", txID, merchantName)
 	return nil
 }
 
-// IsConnected returns true if RabbitMQ connection is alive
-func IsConnected() bool {
-	if Conn == nil || Conn.IsClosed() {
-		return false
+func (b *Broker) ConsumePaymentConfirmations() (<-chan Delivery, error) {
+	msgs, err := b.channel.Consume(
+		b.queue.Name,
+		"",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return nil, err
 	}
-	if Channel == nil {
-		return false
-	}
-	return true
+
+	return convertDeliveries(msgs), nil
 }
 
-// GetNotificationQueue returns the notification queue
-func GetNotificationQueue() amqp.Queue {
-	return NotificationQueue
+func (b *Broker) ConsumeMerchantNotifications() (<-chan Delivery, error) {
+	msgs, err := b.channel.Consume(
+		b.notificationQueue.Name,
+		"merchant-notification-consumer",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertDeliveries(msgs), nil
 }
 
-// Close gracefully closes the RabbitMQ channel and connection
-func Close() {
-	if Channel != nil {
-		Channel.Close()
+func convertDeliveries(msgs <-chan amqp.Delivery) <-chan Delivery {
+	deliveries := make(chan Delivery)
+	go func() {
+		defer close(deliveries)
+		for msg := range msgs {
+			delivery := msg
+			deliveries <- Delivery{
+				Body: delivery.Body,
+				Ack: func() error {
+					return delivery.Ack(false)
+				},
+				Nack: func(requeue bool) error {
+					return delivery.Nack(false, requeue)
+				},
+			}
+		}
+	}()
+	return deliveries
+}
+
+// IsConnected returns true if RabbitMQ connection is alive.
+func (b *Broker) IsConnected() bool {
+	if b == nil || b.conn == nil || b.conn.IsClosed() {
+		return false
 	}
-	if Conn != nil {
-		Conn.Close()
+	return b.channel != nil
+}
+
+// Close gracefully closes the RabbitMQ channel and connection.
+func (b *Broker) Close() {
+	if b == nil {
+		return
 	}
-	log.Println("✓ RabbitMQ closed")
+	if b.channel != nil {
+		b.channel.Close()
+	}
+	if b.conn != nil {
+		b.conn.Close()
+	}
+	log.Println("RabbitMQ closed")
 }

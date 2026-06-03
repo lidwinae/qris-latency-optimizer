@@ -2,73 +2,99 @@ package worker
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"time"
 
-	"qris-latency-optimizer/internal/websocket"
+	"qris-latency-optimizer/delivery/middleware"
 	"qris-latency-optimizer/repository/rabbitmq"
-
-	
+	"qris-latency-optimizer/usecase"
 )
 
-// NotificationPayload - struktur data dari RabbitMQ
 type NotificationPayload struct {
 	TransactionID string    `json:"transaction_id"`
 	MerchantID    string    `json:"merchant_id"`
 	MerchantName  string    `json:"merchant_name"`
 	Amount        float64   `json:"amount"`
 	Status        string    `json:"status"`
-	Timestamp     string    `json:"timestamp"`
+	Timestamp     time.Time `json:"timestamp"`
 }
 
-// Global reference ke WebSocket hub
-var WSHub *websocket.Hub
-
-// SetWSHub - set the WebSocket hub reference
-func SetWSHub(hub *websocket.Hub) {
-	WSHub = hub
+type PaymentConsumer interface {
+	ConsumePaymentConfirmations() (<-chan rabbitmq.Delivery, error)
 }
 
-// StartPaymentConsumer - start consuming messages dari RabbitMQ
-func StartPaymentConsumer() {
+type NotificationConsumer interface {
+	ConsumeMerchantNotifications() (<-chan rabbitmq.Delivery, error)
+}
+
+type MerchantNotifier interface {
+	SendToMerchant(merchantID string, notification interface{}) error
+}
+
+// StartPaymentConsumer runs a background goroutine to process async payment confirmations
+func StartPaymentConsumer(consumer PaymentConsumer, txUsecase usecase.TransactionUsecase) {
+	msgs, err := consumer.ConsumePaymentConfirmations()
+	if err != nil {
+		log.Fatalf("Failed to register RabbitMQ consumer: %v", err)
+	}
+
 	go func() {
-		channel := rabbitmq.Channel
-		if channel == nil {
-			log.Println("⚠ RabbitMQ channel not available, consumer not started")
-			return
+		for d := range msgs {
+			processStart := time.Now()
+
+			var event map[string]string
+			if err := json.Unmarshal(d.Body, &event); err != nil {
+				log.Printf("[Worker] Error unmarshalling message: %v | Body: %s", err, string(d.Body))
+				middleware.RecordPaymentWorkerProcessed("error", time.Since(processStart).Seconds())
+				continue
+			}
+
+			transactionID := event["transaction_id"]
+			if transactionID == "" {
+				log.Printf("[Worker] Skipping message with empty transaction_id")
+				middleware.RecordPaymentWorkerProcessed("error", time.Since(processStart).Seconds())
+				continue
+			}
+
+			// We re-use the Sync method because it updates DB and invalidates cache
+			_, err := txUsecase.ConfirmPaymentSync(transactionID)
+			if err != nil {
+				log.Printf("[Worker] Failed to update transaction %s: %v", transactionID, err)
+				middleware.RecordPaymentWorkerProcessed("error", time.Since(processStart).Seconds())
+				continue
+			}
+
+			elapsed := time.Since(processStart)
+			middleware.RecordPaymentWorkerProcessed("success", elapsed.Seconds())
+			log.Printf("[Worker] Confirmed payment %s in %v", transactionID, elapsed)
 		}
+	}()
 
-		// Use NotificationQueue yang sudah dideklarasi
-		q := rabbitmq.GetNotificationQueue()
+	fmt.Println("RabbitMQ Worker is running and waiting for messages...")
+}
 
-		msgs, err := channel.Consume(
-			q.Name,
-			"consumer",
-			false, // manual ack
-			false,
-			false,
-			false,
-			nil,
-		)
+func StartNotificationConsumer(consumer NotificationConsumer, notifier MerchantNotifier) {
+	go func() {
+		msgs, err := consumer.ConsumeMerchantNotifications()
 		if err != nil {
-			log.Fatalf("❌ Failed to consume: %v", err)
+			log.Fatalf("Failed to register RabbitMQ notification consumer: %v", err)
 		}
 
-		log.Println("✓ Consumer worker started, listening for notifications...")
+		log.Println("RabbitMQ notification consumer is running and waiting for messages...")
 
 		for msg := range msgs {
 			var payload NotificationPayload
 			err := json.Unmarshal(msg.Body, &payload)
 			if err != nil {
-				log.Printf("❌ Failed to unmarshal: %v", err)
-				msg.Nack(false, false)
+				log.Printf("[NotificationWorker] Failed to unmarshal message: %v", err)
+				if nackErr := msg.Nack(false); nackErr != nil {
+					log.Printf("[NotificationWorker] Failed to nack message: %v", nackErr)
+				}
 				continue
 			}
 
-			log.Printf("📨 Processing notification [TX: %s, Merchant: %s]", 
-				payload.TransactionID, payload.MerchantName)
-
-			// Push ke WebSocket hub
-			if WSHub != nil {
+			if notifier != nil {
 				notification := map[string]interface{}{
 					"type":           "transaction_notification",
 					"transaction_id": payload.TransactionID,
@@ -79,15 +105,17 @@ func StartPaymentConsumer() {
 					"timestamp":      payload.Timestamp,
 				}
 
-				err := WSHub.SendToMerchant(payload.MerchantID, notification)
+				err := notifier.SendToMerchant(payload.MerchantID, notification)
 				if err != nil {
-					log.Printf("⚠ Failed to send via WebSocket: %v", err)
+					log.Printf("[NotificationWorker] Failed to send via WebSocket: %v", err)
 				}
 			} else {
-				log.Println("⚠ WebSocket hub not initialized")
+				log.Println("[NotificationWorker] WebSocket hub not initialized")
 			}
 
-			msg.Ack(false) // acknowledge success
+			if ackErr := msg.Ack(); ackErr != nil {
+				log.Printf("[NotificationWorker] Failed to ack message: %v", ackErr)
+			}
 		}
 	}()
 }

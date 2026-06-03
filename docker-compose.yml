@@ -1,0 +1,157 @@
+services:
+  golang:
+    image: golang:1.26-alpine
+    container_name: qris_golang
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app/backend
+    working_dir: /app/backend
+    command: go run cmd/main.go
+    env_file:
+      - .env
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:${RABBITMQ_PORT}/
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      WEBSOCKET_READ_DEADLINE: ${WEBSOCKET_READ_DEADLINE}
+      WEBSOCKET_WRITE_DEADLINE: ${WEBSOCKET_WRITE_DEADLINE}
+      WEBSOCKET_IDLE_CHECK_INTERVAL: ${WEBSOCKET_IDLE_CHECK_INTERVAL}
+      WEBSOCKET_IDLE_THRESHOLD: ${WEBSOCKET_IDLE_THRESHOLD}
+      WEBSOCKET_MAX_MESSAGE_SIZE: ${WEBSOCKET_MAX_MESSAGE_SIZE}
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    
+  frontend:
+    image: node:20-alpine
+    container_name: qris_web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+    working_dir: /app/frontend
+    environment:
+      VITE_BACKEND_TARGET: http://golang:8080
+      VITE_WS_TARGET: ws://golang:8080
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - golang
+
+  customer_app:
+    image: node:20-alpine
+    container_name: qris_customer_app
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./customer-app:/app/customer-app
+    working_dir: /app/customer-app
+    environment:
+      VITE_API_PORT: ${CUSTOMER_APP_API_PORT:-8080}
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - golang
+  
+  db:
+    image: postgres:15-alpine
+    container_name: qris_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: qris_redis
+    ports:
+      - "6379:6379"
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: qris_redisinsight
+    ports:
+      - "5540:5540"
+    depends_on:
+      - redis
+    volumes:
+      - redisinsight_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: qris_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: qris_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - golang
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: qris_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GF_AUTH_ANONYMOUS_ORG_ROLE}
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:latest
+    container_name: qris_toxiproxy
+    ports:
+      - "8474:8474"
+      - "8081:8081"
+    depends_on:
+      - golang
+
+volumes:
+  postgres_data:
+  redisinsight_data:
+  grafana_data:
