@@ -99,6 +99,14 @@ var (
 	)
 )
 
+func init() {
+	// Register default Go process and runtime collectors so that
+	// process_cpu_seconds_total, process_resident_memory_bytes,
+	// go_goroutines, go_gc_duration_seconds, etc. are exposed.
+	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	Registry.MustRegister(prometheus.NewGoCollector())
+}
+
 func NetworkModeFromHost(host string) string {
 	if host == "" {
 		return "unknown"

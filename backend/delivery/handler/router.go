@@ -20,8 +20,14 @@ func SetupRouter(h *Handlers, wsHub *websocket.Hub) *gin.Engine {
 	r := gin.Default()
 	middleware.CorsHandler(r)
 	r.Use(middleware.PrometheusMiddleware())
+	r.Use(middleware.StressMiddleware())
 
 	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(middleware.Registry, promhttp.HandlerOpts{})))
+
+	// Stress-mode control endpoints (used by loadtest CLI)
+	r.GET("/api/stress/status", middleware.StressStatusHandler)
+	r.POST("/api/stress/enable", middleware.StressEnableHandler)
+	r.POST("/api/stress/disable", middleware.StressDisableHandler)
 
 	r.GET("/api/qris", h.QRIS.GenerateDynamic)
 	r.GET("/api/merchants", h.Merchant.GetMerchants)

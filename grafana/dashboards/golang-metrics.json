@@ -12,7 +12,12 @@
     {
       "type": "row",
       "title": "Live Overview",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
     },
     {
       "type": "stat",
@@ -29,7 +34,12 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 }
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      }
     },
     {
       "type": "stat",
@@ -46,7 +56,12 @@
           "decimals": 0
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 }
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      }
     },
     {
       "type": "stat",
@@ -64,14 +79,28 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.01 },
-              { "color": "red", "value": 0.05 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
             ]
           }
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 }
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      }
     },
     {
       "type": "stat",
@@ -88,7 +117,12 @@
           "decimals": 0
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 }
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      }
     },
     {
       "type": "timeseries",
@@ -106,7 +140,12 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 5 }
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      }
     },
     {
       "type": "timeseries",
@@ -124,12 +163,22 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 5 }
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      }
     },
     {
       "type": "row",
       "title": "Normal vs Rural Latency",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      }
     },
     {
       "type": "timeseries",
@@ -147,7 +196,12 @@
           "decimals": 1
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 }
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 13
+      }
     },
     {
       "type": "timeseries",
@@ -165,7 +219,12 @@
           "decimals": 1
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 }
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 13
+      }
     },
     {
       "type": "timeseries",
@@ -183,7 +242,12 @@
           "decimals": 1
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 }
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 13
+      }
     },
     {
       "type": "table",
@@ -202,12 +266,22 @@
           "decimals": 3
         }
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 }
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      }
     },
     {
       "type": "row",
       "title": "Payment Flow",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      }
     },
     {
       "type": "timeseries",
@@ -225,7 +299,12 @@
           "decimals": 1
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 30 }
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      }
     },
     {
       "type": "timeseries",
@@ -243,7 +322,12 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 30 }
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 30
+      }
     },
     {
       "type": "timeseries",
@@ -261,7 +345,12 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 30 }
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      }
     },
     {
       "type": "timeseries",
@@ -279,7 +368,12 @@
           "decimals": 1
         }
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 38 }
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      }
     },
     {
       "type": "timeseries",
@@ -297,12 +391,22 @@
           "decimals": 0
         }
       },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 38 }
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      }
     },
     {
       "type": "row",
       "title": "Cache",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      }
     },
     {
       "type": "timeseries",
@@ -320,7 +424,12 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 46 }
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 46
+      }
     },
     {
       "type": "timeseries",
@@ -338,7 +447,12 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 46 }
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 46
+      }
     },
     {
       "type": "timeseries",
@@ -356,7 +470,86 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 46 }
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 46
+      }
+    },
+    {
+      "type": "row",
+      "title": "CPU & Resource Monitoring",
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 1
+      },
+      "id": 900
+    },
+    {
+      "title": "Go Backend CPU Usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 8,
+        "h": 8
+      },
+      "id": 901,
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total[1m])",
+          "legendFormat": "Backend CPU (Cores)"
+        }
+      ]
+    },
+    {
+      "title": "Host System CPU Usage (%)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 54,
+        "w": 8,
+        "h": 8
+      },
+      "id": 902,
+      "targets": [
+        {
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "Host CPU %"
+        }
+      ]
+    },
+    {
+      "title": "Host System RAM Usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 54,
+        "w": 8,
+        "h": 8
+      },
+      "id": 903,
+      "targets": [
+        {
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "legendFormat": "Used RAM (Bytes)"
+        }
+      ]
     }
   ]
 }
