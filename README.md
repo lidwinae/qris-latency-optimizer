@@ -361,6 +361,44 @@ The customer app records request round-trip duration with Axios interceptors and
 sends it to `POST /api/telemetry`. Metrics include `network_mode`, derived from
 port `8080` as `normal` and port `8081` as `rural`.
 
+### CPU, Resource, and Latency Monitoring
+
+The project relies fully on Grafana for unified monitoring. You can access the specific dashboards directly using these links:
+
+1. **[Latency & Application Dashboard](http://localhost:3000/d/golang-metrics/qris-live-simulation-dashboard)**
+   - Monitors live payment transactions, endpoint latency, RabbitMQ queue processing times, and frontend performance differences between Normal vs Rural networks.
+
+2. **[System CPU & Resource Dashboard](http://localhost:3000/d/rYdddlPWk/node-exporter-full)**
+   - Powered by Node Exporter running in Docker, this dashboard provides detailed insights into host CPU usage, RAM utilization, Disk I/O, and Network traffic.
+
+3. **Go Runtime Metrics**: 
+   The Go backend also exposes internal runtime metrics (like `process_cpu_seconds_total`, `process_resident_memory_bytes`, and `go_goroutines`) directly via the `/metrics` endpoint, which are scraped automatically by Prometheus.
+
+## Load Testing With Custom Go CLI
+
+The project includes a custom Go-based Load Test CLI tool for interactive stress testing. It dynamically simulates database contention and network latency across various load profiles.
+
+Run the CLI:
+
+```bash
+./loadtest/run.sh
+```
+
+### CLI Menu Options
+
+| Option | Purpose | Description |
+| --- | --- | --- |
+| `1) 🟢 Light Load` | Basic validation | 10 VUs for 30s. Injects 200–800ms artificial delay. Simulates slight database contention. |
+| `2) 🟡 Medium Load` | Noticeable lag | 50 VUs for 30s. Injects 0.5–2s artificial delay. |
+| `3) 🔴 Heavy Load` | DB lock simulation | 100 VUs for 60s. Injects 1–4s artificial delay. Pushes latency closer to timeouts. |
+| `4) 💀 Extreme Load` | Timeout boundary | 200 VUs for 60s. Injects 2–8s artificial delay. Tests system behavior under severe distress. |
+| `5) 📊 Quick Bench` | Baseline comparison | 50 VUs for 15s. No artificial delay. Useful for generating raw, uninhibited throughput numbers. |
+| `6) 🔧 Enable Stress Mode` | Manual UI testing | Turns on artificial delay for the entire backend without generating traffic. Good for clicking around the merchant/customer apps to feel the lag. |
+| `7) ✅ Disable Stress Mode` | Reset system | Turns off all artificial delays, restoring normal backend performance. |
+| `8) 🚪 Exit` | Close | Exits the Load Test CLI. |
+
+The CLI prints a detailed latency report (Avg, Min, Max, P95, RPS) after each test run. 
+
 ## Load Testing With K6
 
 Scripts live in `k6/`.
