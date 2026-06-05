@@ -68,7 +68,7 @@
       "title": "Error Rate",
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) / clamp_min(sum(rate(http_requests_total[1m])), 0.001)",
+          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[1m])) or vector(0)) / clamp_min(sum(rate(http_requests_total[1m])), 0.001)",
           "refId": "A"
         }
       ],
@@ -76,6 +76,7 @@
         "defaults": {
           "unit": "percentunit",
           "decimals": 2,
+          "noValue": "0%",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -504,10 +505,30 @@
       "id": 901,
       "targets": [
         {
-          "expr": "rate(process_cpu_seconds_total[1m])",
-          "legendFormat": "Backend CPU (Cores)"
+          "expr": "rate(process_cpu_seconds_total{job=\"qris-backend\"}[1m]) * 100",
+          "legendFormat": "Backend CPU %",
+          "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "min": 0,
+          "custom": {
+            "fillOpacity": 20,
+            "gradientMode": "scheme"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      }
     },
     {
       "title": "Host System CPU Usage (%)",
@@ -525,10 +546,31 @@
       "id": 902,
       "targets": [
         {
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
-          "legendFormat": "Host CPU %"
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "Host CPU %",
+          "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "fillOpacity": 20,
+            "gradientMode": "scheme"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 85 }
+            ]
+          }
+        }
+      }
     },
     {
       "title": "Host System RAM Usage",
@@ -546,10 +588,30 @@
       "id": 903,
       "targets": [
         {
-          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
-          "legendFormat": "Used RAM (Bytes)"
+          "expr": "(node_memory_MemTotal_bytes{job=\"node-exporter\"} - node_memory_MemAvailable_bytes{job=\"node-exporter\"}) / 1024 / 1024 / 1024",
+          "legendFormat": "Used RAM",
+          "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "decimals": 2,
+          "min": 0,
+          "custom": {
+            "fillOpacity": 20,
+            "gradientMode": "scheme"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 16 },
+              { "color": "red", "value": 24 }
+            ]
+          }
+        }
+      }
     }
   ]
 }
